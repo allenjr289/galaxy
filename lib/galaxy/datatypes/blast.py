@@ -91,9 +91,7 @@ class BlastXml(GenericXml):
         ]:
             return False
         line = handle.readline()
-        if line.strip() != "<BlastOutput>":
-            return False
-        return True
+        return line.strip() == "<BlastOutput>"
 
     @staticmethod
     def merge(split_files, output_file):
@@ -122,9 +120,9 @@ class BlastXml(GenericXml):
                     sleep(1)
                     h = open(f)
                     header = h.readline()
-                    if not header:
-                        log.error(f"BLAST XML file {f} was empty")
-                        raise ValueError(f"BLAST XML file {f} was empty")
+                if not header:
+                    log.error(f"BLAST XML file {f} was empty")
+                    raise ValueError(f"BLAST XML file {f} was empty")
                 if header.strip() != '<?xml version="1.0"?>':
                     out.write(header)  # for diagnosis
                     h.close()
@@ -229,11 +227,11 @@ class _BlastDb(Data):
         # Galaxy assumes HTML for the display of composite datatypes,
         return smart_str(f"<html><head><title>{title}</title></head><body><pre>{msg}</pre></body></html>"), headers
 
-    def merge(split_files, output_file):
+    def merge(self, output_file):
         """Merge BLAST databases (not implemented for now)."""
         raise NotImplementedError("Merging BLAST databases is non-trivial (do this via makeblastdb?)")
 
-    def split(cls, input_datasets, subdir_generator_function, split_params):
+    def split(self, input_datasets, subdir_generator_function, split_params):
         """Split a BLAST database (not implemented for now)."""
         if split_params is None:
             return None

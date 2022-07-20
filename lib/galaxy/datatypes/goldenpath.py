@@ -167,7 +167,7 @@ class AGPFile:
                 fields = line.split("\t")
 
                 # There should be exactly 9 tab delimited fields
-                if not len(fields) == 9:
+                if len(fields) != 9:
                     raise AGPError(self.fname, line_number, "detected more than 9 tab delimited fields")
 
                 # All fields should have a value
@@ -176,7 +176,7 @@ class AGPFile:
 
                 agp_line: Union[AGPGapLine, AGPSeqLine]
                 # Instantiate all the AGPLine objects. These will do line-specific validations.
-                if fields[4] == "N" or fields[4] == "U":
+                if fields[4] in ["N", "U"]:
                     agp_line = AGPGapLine(self.fname, line_number, *fields)
                 else:
                     agp_line = AGPSeqLine(self.fname, line_number, *fields)
@@ -246,10 +246,10 @@ class AGPObject:
         self.obj_intervals = []  # Stores intervals as 0-indexed
 
         # Perform checks to ensure the object is properly initialized
-        if not in_agp_line.obj_beg == 1:
+        if in_agp_line.obj_beg != 1:
             raise AGPError(self.fname, in_agp_line.line_number, "the first object coordinates should start with '1'")
 
-        if not in_agp_line.pid == 1:
+        if in_agp_line.pid != 1:
             raise AGPError(self.fname, in_agp_line.line_number, "all objects should start with a 'part_number' of '1'")
 
         # If we have passed the initialization tests, add this line like any other
@@ -287,13 +287,15 @@ class AGPObject:
             raise AGPError(self.fname, agp_line.line_number, "non-sequential part_numbers")
 
         # Check that the object intervals are sequential
-        if self.obj_intervals:
-            if self.obj_intervals[-1][1] != agp_line.obj_beg - 1:
-                raise AGPError(
-                    self.fname,
-                    agp_line.line_number,
-                    f"some positions in {agp_line.obj} are not accounted for or overlapping",
-                )
+        if (
+            self.obj_intervals
+            and self.obj_intervals[-1][1] != agp_line.obj_beg - 1
+        ):
+            raise AGPError(
+                self.fname,
+                agp_line.line_number,
+                f"some positions in {agp_line.obj} are not accounted for or overlapping",
+            )
 
         self.previous_pid = agp_line.pid
         self.obj_intervals.append((agp_line.obj_beg - 1, agp_line.obj_end))
@@ -603,6 +605,5 @@ class AGPGapLine(AGPLine):
                     self.line_number,
                     f"linkage evidence must be 'na' when not asserting linkage. Got {self.linkage_evidence}",
                 )
-        else:
-            if "na" in all_evidence:
-                raise AGPError(self.fname, self.line_number, "'na' is invalid linkage evidence when asserting linkage")
+        elif "na" in all_evidence:
+            raise AGPError(self.fname, self.line_number, "'na' is invalid linkage evidence when asserting linkage")

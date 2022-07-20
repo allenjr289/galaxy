@@ -96,10 +96,7 @@ class ControlTask:
             self.response = message.payload["result"]
 
     def send_task(self, payload, routing_key, local=False, get_response=False, timeout=10):
-        if local:
-            declare_queues = self.control_queues
-        else:
-            declare_queues = self.declare_queues
+        declare_queues = self.control_queues if local else self.declare_queues
         reply_to = None
         callback_queue = []
         if get_response:
@@ -205,7 +202,7 @@ def reload_data_managers(app, **kwargs):
 
 
 def reload_display_application(app, **kwargs):
-    display_application_ids = kwargs.get("display_application_ids", None)
+    display_application_ids = kwargs.get("display_application_ids")
     log.debug(f"Executing display application reload task for {display_application_ids}")
     app.datatypes_registry.reload_display_applications(display_application_ids)
 
@@ -216,11 +213,12 @@ def reload_sanitize_allowlist(app):
 
 
 def recalculate_user_disk_usage(app, **kwargs):
-    user_id = kwargs.get("user_id", None)
+    user_id = kwargs.get("user_id")
     sa_session = app.model.context
     if user_id:
-        user = sa_session.query(app.model.User).get(app.security.decode_id(user_id))
-        if user:
+        if user := sa_session.query(app.model.User).get(
+            app.security.decode_id(user_id)
+        ):
             user.calculate_and_set_disk_usage()
         else:
             log.error(f"Recalculate user disk usage task failed, user {user_id} not found")
@@ -269,13 +267,11 @@ def reload_tour(app, **kwargs):
 def __job_rule_module_names(app):
     rules_module_names = {"galaxy.jobs.rules"}
     if app.job_config.dynamic_params is not None:
-        module_name = app.job_config.dynamic_params.get("rules_module")
-        if module_name:
+        if module_name := app.job_config.dynamic_params.get("rules_module"):
             rules_module_names.add(module_name)
     # Also look for destination level rules_module overrides
     for dest_tuple in app.job_config.destinations.values():
-        module_name = dest_tuple[0].params.get("rules_module")
-        if module_name:
+        if module_name := dest_tuple[0].params.get("rules_module"):
             rules_module_names.add(module_name)
     return rules_module_names
 

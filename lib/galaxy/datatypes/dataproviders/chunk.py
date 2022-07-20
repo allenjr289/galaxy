@@ -55,8 +55,7 @@ class ChunkDataProvider(base.DataProvider):
         # not reeeally an iterator per se
         self.__enter__()
         self.source.seek(self.chunk_pos, os.SEEK_SET)
-        chunk = self.encode(self.source.read(self.chunk_size))
-        yield chunk
+        yield self.encode(self.source.read(self.chunk_size))
         self.__exit__()
 
     def encode(self, chunk):

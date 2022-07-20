@@ -66,7 +66,9 @@ class XMLDataProvider(HierarchalDataProvider):
         # TODO: fails with '#' - browser thinks it's an anchor - use urlencode
         # TODO: need removal/replacement of etree namespacing here - then move to string match
         Element = getattr(etree, "_Element", etree.Element)
-        return bool((selector is None) or (isinstance(element, Element) and selector in element.tag))
+        return selector is None or (
+            isinstance(element, Element) and selector in element.tag
+        )
 
     def element_as_dict(self, element):
         """
@@ -94,8 +96,7 @@ class XMLDataProvider(HierarchalDataProvider):
                 child_data = self.element_as_dict(child)
 
                 next_depth = max_depth - 1 if isinstance(max_depth, int) else None
-                grand_children = list(self.get_children(child, next_depth))
-                if grand_children:
+                if grand_children := list(self.get_children(child, next_depth)):
                     child_data["children"] = grand_children
 
                 yield child_data
@@ -123,8 +124,9 @@ class XMLDataProvider(HierarchalDataProvider):
                     if self.num_valid_data_read > self.offset:
                         # convert to dict and yield
                         selected_element_dict = self.element_as_dict(selected_element)
-                        children = list(self.get_children(selected_element, self.max_depth))
-                        if children:
+                        if children := list(
+                            self.get_children(selected_element, self.max_depth)
+                        ):
                             selected_element_dict["children"] = children
                         yield selected_element_dict
 

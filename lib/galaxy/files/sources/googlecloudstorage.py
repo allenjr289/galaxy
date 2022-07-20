@@ -23,8 +23,7 @@ class GoogleCloudStorageFilesSource(PyFilesystem2FilesSource):
             args["client"] = Client.create_anonymous_client()
         elif props.get("token"):
             args["client"] = Client(project=project, credentials=Credentials(**props))
-        handle = GCSFS(bucket_name, root_path=root_path, retry=0, **args)
-        return handle
+        return GCSFS(bucket_name, root_path=root_path, retry=0, **args)
 
 
 __all__ = ("GoogleCloudStorageFilesSource",)

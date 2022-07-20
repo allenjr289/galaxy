@@ -33,7 +33,7 @@ def __main__():
             if not line or line.startswith("#"):
                 continue
             fastq_block_lines = (fastq_block_lines + 1) % 4
-            line_startswith = line[0:1]
+            line_startswith = line[:1]
             if fastq_block_lines == 1:
                 # line 1 is sequence title
                 if not seq_title_startswith:
@@ -44,8 +44,6 @@ def __main__():
             elif fastq_block_lines == 2:
                 # line 2 is nucleotides
                 outfile.write(f"{line}\n")
-            else:
-                pass
 
 
 if __name__ == "__main__":

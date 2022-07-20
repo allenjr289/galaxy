@@ -67,10 +67,7 @@ class Html(Text):
         True
         """
         headers = iter_headers(file_prefix, None)
-        for hdr in headers:
-            if hdr and hdr[0].lower().find("<html>") >= 0:
-                return True
-        return False
+        return any(hdr and hdr[0].lower().find("<html>") >= 0 for hdr in headers)
 
 
 @build_sniff_from_prefix
@@ -97,22 +94,20 @@ class Json(Text):
         return self._looks_like_json(file_prefix)
 
     def _looks_like_json(self, file_prefix):
-        # Pattern used by SequenceSplitLocations
-        if file_prefix.file_size < 50000 and not file_prefix.truncated:
-            # If the file is small enough - don't guess just check.
-            try:
-                item = json.loads(file_prefix.contents_header)
-                # exclude simple types, must set format in these cases
-                assert isinstance(item, (list, dict))
-                return True
-            except Exception:
-                return False
-        else:
-            start = file_prefix.string_io().read(100).strip()
-            if start:
-                # simple types are valid JSON as well,
-                # but if necessary format has to be set explicitly
-                return start.startswith("[") or start.startswith("{")
+        if file_prefix.file_size >= 50000 or file_prefix.truncated:
+            return (
+                start.startswith("[") or start.startswith("{")
+                if (start := file_prefix.string_io().read(100).strip())
+                else False
+            )
+
+        # If the file is small enough - don't guess just check.
+        try:
+            item = json.loads(file_prefix.contents_header)
+            # exclude simple types, must set format in these cases
+            assert isinstance(item, (list, dict))
+            return True
+        except Exception:
             return False
 
     def display_peek(self, dataset):
@@ -173,10 +168,11 @@ class Ipynb(Json):
             try:
                 with open(file_prefix.filename) as f:
                     ipynb = json.load(f)
-                if ipynb.get("nbformat", False) is not False and ipynb.get("metadata", False):
-                    return True
-                else:
-                    return False
+                return bool(
+                    ipynb.get("nbformat", False) is not False
+                    and ipynb.get("metadata", False)
+                )
+
             except Exception:
                 return False
 
@@ -198,30 +194,29 @@ class Ipynb(Json):
         preview = string_as_bool(preview)
         if to_ext or not preview:
             return self._serve_raw(dataset, to_ext, headers, **kwd)
-        else:
-            with tempfile.NamedTemporaryFile(delete=False) as ofile_handle:
-                ofilename = ofile_handle.name
-            try:
-                cmd = [
-                    "jupyter",
-                    "nbconvert",
-                    "--to",
-                    "html",
-                    "--template",
-                    "full",
-                    dataset.file_name,
-                    "--output",
-                    ofilename,
-                ]
-                subprocess.check_call(cmd)
-                ofilename = f"{ofilename}.html"
-            except subprocess.CalledProcessError:
-                ofilename = dataset.file_name
-                log.exception(
-                    'Command "%s" failed. Could not convert the Jupyter Notebook to HTML, defaulting to plain text.',
-                    shlex_join(cmd),
-                )
-            return open(ofilename, mode="rb"), headers
+        with tempfile.NamedTemporaryFile(delete=False) as ofile_handle:
+            ofilename = ofile_handle.name
+        try:
+            cmd = [
+                "jupyter",
+                "nbconvert",
+                "--to",
+                "html",
+                "--template",
+                "full",
+                dataset.file_name,
+                "--output",
+                ofilename,
+            ]
+            subprocess.check_call(cmd)
+            ofilename = f"{ofilename}.html"
+        except subprocess.CalledProcessError:
+            ofilename = dataset.file_name
+            log.exception(
+                'Command "%s" failed. Could not convert the Jupyter Notebook to HTML, defaulting to plain text.',
+                shlex_join(cmd),
+            )
+        return open(ofilename, mode="rb"), headers
 
     def set_meta(self, dataset, **kwd):
         """
@@ -365,10 +360,11 @@ class Biom1(Json):
             dataset.blurb = "Biological Observation Matrix v1"
 
     def sniff_prefix(self, file_prefix: FilePrefix):
-        is_biom = False
-        if self._looks_like_json(file_prefix):
-            is_biom = self._looks_like_biom(file_prefix)
-        return is_biom
+        return (
+            self._looks_like_biom(file_prefix)
+            if self._looks_like_json(file_prefix)
+            else False
+        )
 
     def _looks_like_biom(self, file_prefix: FilePrefix, load_size=50000):
         """
@@ -400,48 +396,47 @@ class Biom1(Json):
         """
         Store metadata information from the BIOM file.
         """
-        if dataset.has_data():
-            with open(dataset.file_name) as fh:
+        if not dataset.has_data():
+            return
+        with open(dataset.file_name) as fh:
+            try:
+                json_dict = json.load(fh)
+            except Exception:
+                return
+
+            def _transform_dict_list_ids(dict_list):
+                return [x.get("id", None) for x in dict_list] if dict_list else []
+
+            b_transform = {"rows": _transform_dict_list_ids, "columns": _transform_dict_list_ids}
+            for (m_name, b_name) in [
+                ("table_rows", "rows"),
+                ("table_matrix_element_type", "matrix_element_type"),
+                ("table_format", "format"),
+                ("table_generated_by", "generated_by"),
+                ("table_matrix_type", "matrix_type"),
+                ("table_shape", "shape"),
+                ("table_format_url", "format_url"),
+                ("table_date", "date"),
+                ("table_type", "type"),
+                ("table_id", "id"),
+                ("table_columns", "columns"),
+            ]:
                 try:
-                    json_dict = json.load(fh)
+                    metadata_value = json_dict.get(b_name, None)
+                    if b_name == "columns" and metadata_value:
+                        keep_columns = set()
+                        for column in metadata_value:
+                            if column["metadata"] is not None:
+                                for k, v in column["metadata"].items():
+                                    if v is not None:
+                                        keep_columns.add(k)
+                        final_list = sorted(list(keep_columns))
+                        dataset.metadata.table_column_metadata_headers = final_list
+                    if b_name in b_transform:
+                        metadata_value = b_transform[b_name](metadata_value)
+                    setattr(dataset.metadata, m_name, metadata_value)
                 except Exception:
-                    return
-
-                def _transform_dict_list_ids(dict_list):
-                    if dict_list:
-                        return [x.get("id", None) for x in dict_list]
-                    return []
-
-                b_transform = {"rows": _transform_dict_list_ids, "columns": _transform_dict_list_ids}
-                for (m_name, b_name) in [
-                    ("table_rows", "rows"),
-                    ("table_matrix_element_type", "matrix_element_type"),
-                    ("table_format", "format"),
-                    ("table_generated_by", "generated_by"),
-                    ("table_matrix_type", "matrix_type"),
-                    ("table_shape", "shape"),
-                    ("table_format_url", "format_url"),
-                    ("table_date", "date"),
-                    ("table_type", "type"),
-                    ("table_id", "id"),
-                    ("table_columns", "columns"),
-                ]:
-                    try:
-                        metadata_value = json_dict.get(b_name, None)
-                        if b_name == "columns" and metadata_value:
-                            keep_columns = set()
-                            for column in metadata_value:
-                                if column["metadata"] is not None:
-                                    for k, v in column["metadata"].items():
-                                        if v is not None:
-                                            keep_columns.add(k)
-                            final_list = sorted(list(keep_columns))
-                            dataset.metadata.table_column_metadata_headers = final_list
-                        if b_name in b_transform:
-                            metadata_value = b_transform[b_name](metadata_value)
-                        setattr(dataset.metadata, m_name, metadata_value)
-                    except Exception:
-                        log.exception("Something in the metadata detection for biom1 went wrong.")
+                    log.exception("Something in the metadata detection for biom1 went wrong.")
 
 
 @build_sniff_from_prefix
@@ -475,10 +470,11 @@ class ImgtJson(Json):
         >>> ImgtJson().sniff( fname )
         True
         """
-        is_imgt = False
-        if self._looks_like_json(file_prefix):
-            is_imgt = self._looks_like_imgt(file_prefix)
-        return is_imgt
+        return (
+            self._looks_like_imgt(file_prefix)
+            if self._looks_like_json(file_prefix)
+            else False
+        )
 
     def _looks_like_imgt(self, file_prefix: FilePrefix, load_size=5000):
         """
@@ -490,9 +486,12 @@ class ImgtJson(Json):
         try:
             with open(file_prefix.filename) as fh:
                 segment_str = fh.read(load_size)
-                if segment_str.strip().startswith("["):
-                    if '"taxonId"' in segment_str and '"anchorPoints"' in segment_str:
-                        is_imgt = True
+                if (
+                    segment_str.strip().startswith("[")
+                    and '"taxonId"' in segment_str
+                    and '"anchorPoints"' in segment_str
+                ):
+                    is_imgt = True
         except Exception:
             pass
         return is_imgt
@@ -501,18 +500,19 @@ class ImgtJson(Json):
         """
         Store metadata information from the imgt file.
         """
-        if dataset.has_data():
-            with open(dataset.file_name) as fh:
-                try:
-                    json_dict = json.load(fh)
-                    tax_names = []
-                    for entry in json_dict:
-                        if "taxonId" in entry:
-                            names = "%d: %s" % (entry["taxonId"], ",".join(entry["speciesNames"]))
-                            tax_names.append(names)
-                    dataset.metadata.taxon_names = tax_names
-                except Exception:
-                    return
+        if not dataset.has_data():
+            return
+        with open(dataset.file_name) as fh:
+            try:
+                json_dict = json.load(fh)
+                tax_names = []
+                for entry in json_dict:
+                    if "taxonId" in entry:
+                        names = "%d: %s" % (entry["taxonId"], ",".join(entry["speciesNames"]))
+                        tax_names.append(names)
+                dataset.metadata.taxon_names = tax_names
+            except Exception:
+                return
 
 
 @build_sniff_from_prefix
@@ -541,17 +541,17 @@ class GeoJson(Json):
         >>> GeoJson().sniff( fname )
         True
         """
-        is_geojson = False
-        if self._looks_like_json(file_prefix):
-            is_geojson = self._looks_like_geojson(file_prefix)
-        return is_geojson
+        return (
+            self._looks_like_geojson(file_prefix)
+            if self._looks_like_json(file_prefix)
+            else False
+        )
 
     def _looks_like_geojson(self, file_prefix: FilePrefix, load_size=5000):
         """
         One of "Point", "MultiPoint", "LineString", "MultiLineString", "Polygon", "MultiPolygon", and "GeometryCollection" needs to be present.
         All of "type", "geometry", and "coordinates" needs to be present.
         """
-        is_geojson = False
         try:
             with open(file_prefix.filename) as fh:
                 segment_str = fh.read(load_size)
@@ -566,12 +566,13 @@ class GeoJson(Json):
                         "MultiPolygon",
                         "GeometryCollection",
                     ]
+                ) and all(
+                    x in segment_str for x in ["type", "geometry", "coordinates"]
                 ):
-                    if all(x in segment_str for x in ["type", "geometry", "coordinates"]):
-                        return True
+                    return True
         except Exception:
             pass
-        return is_geojson
+        return False
 
 
 @build_sniff_from_prefix
@@ -601,15 +602,14 @@ class Obo(Text):
         stanza = re.compile(r"^\[.*\]$")
         handle = file_prefix.string_io()
         first_line = handle.readline()
-        if not first_line.startswith("format-version:"):
-            return False
-
-        for line in handle:
-            if stanza.match(line.strip()):
-                # a stanza needs to begin with an ID tag
-                if next(handle).startswith("id:"):
-                    return True
-        return False
+        return (
+            any(
+                stanza.match(line.strip()) and next(handle).startswith("id:")
+                for line in handle
+            )
+            if first_line.startswith("format-version:")
+            else False
+        )
 
 
 @build_sniff_from_prefix
@@ -741,8 +741,7 @@ class SnpEffDb(Text):
             with gzip.open(path, "rt") as fh:
                 buf = fh.read(100)
                 lines = buf.splitlines()
-                m = re.match(r"^(SnpEff)\s+(\d+\.\d+).*$", lines[0].strip())
-                if m:
+                if m := re.match(r"^(SnpEff)\s+(\d+\.\d+).*$", lines[0].strip()):
                     snpeff_version = m.groups()[0] + m.groups()[1]
         except Exception:
             pass
@@ -751,15 +750,15 @@ class SnpEffDb(Text):
     def set_meta(self, dataset, **kwd):
         super().set_meta(dataset, **kwd)
         data_dir = dataset.extra_files_path
-        # search data_dir/genome_version for files
-        regulation_pattern = "regulation_(.+).bin"
-        #  annotation files that are included in snpEff by a flag
-        annotations_dict = {"nextProt.bin": "-nextprot", "motif.bin": "-motif", "interactions.bin": "-interaction"}
-        regulations = []
-        annotations = []
         genome_version = None
         snpeff_version = None
         if data_dir and os.path.isdir(data_dir):
+            # search data_dir/genome_version for files
+            regulation_pattern = "regulation_(.+).bin"
+            #  annotation files that are included in snpEff by a flag
+            annotations_dict = {"nextProt.bin": "-nextprot", "motif.bin": "-motif", "interactions.bin": "-interaction"}
+            regulations = []
+            annotations = []
             for root, _, files in os.walk(data_dir):
                 for fname in files:
                     if fname.startswith("snpEffectPredictor"):
@@ -770,15 +769,13 @@ class SnpEffDb(Text):
                         snpeff_version = self.getSnpeffVersionFromFile(os.path.join(root, fname))
                         if snpeff_version:
                             dataset.metadata.snpeff_version = snpeff_version
-                    else:
-                        m = re.match(regulation_pattern, fname)
-                        if m:
-                            name = m.groups()[0]
-                            regulations.append(name)
-                        elif fname in annotations_dict:
-                            value = annotations_dict[fname]
-                            name = value.lstrip("-")
-                            annotations.append(name)
+                    elif m := re.match(regulation_pattern, fname):
+                        name = m.groups()[0]
+                        regulations.append(name)
+                    elif fname in annotations_dict:
+                        value = annotations_dict[fname]
+                        name = value.lstrip("-")
+                        annotations.append(name)
             dataset.metadata.regulation = regulations
             dataset.metadata.annotation = annotations
             try:
@@ -1039,7 +1036,7 @@ class Gfa2(Text):
             elif line[0] == "G":
                 if len(line) < 6:
                     return False
-            elif line[0] == "O" or line[0] == "U":
+            elif line[0] in ["O", "U"]:
                 if len(line) < 3:
                     return False
             else:

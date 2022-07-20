@@ -53,11 +53,14 @@ class _SpalnDb(Data):
         )
 
     def generate_primary_file(self, dataset=None):
-        rval = ["<html><head><title>Spaln Database</title></head><p/>"]
-        rval.append("<div>This composite dataset is composed of the following files:<p/><ul>")
+        rval = [
+            "<html><head><title>Spaln Database</title></head><p/>",
+            "<div>This composite dataset is composed of the following files:<p/><ul>",
+        ]
+
+        opt_text = ""
         for composite_name, composite_file in self.get_composite_files(dataset=dataset).items():
             fn = composite_name
-            opt_text = ""
             if composite_file.get("description"):
                 rval.append(
                     '<li><a href="%s" type="application/binary">%s (%s)</a>%s</li>'
@@ -75,9 +78,9 @@ class _SpalnDb(Data):
         efp = dataset.extra_files_path
         flist = os.listdir(efp)
         rval = [
-            "<html><head><title>Files for Composite Dataset %s</title></head><body><p/>Composite %s contains:<p/><ul>"
-            % (dataset.name, dataset.name)
+            f"<html><head><title>Files for Composite Dataset {dataset.name}</title></head><body><p/>Composite {dataset.name} contains:<p/><ul>"
         ]
+
         for fname in flist:
             sfname = os.path.split(fname)[-1]
             f, e = os.path.splitext(fname)
@@ -145,11 +148,11 @@ class _SpalnDb(Data):
             headers,
         )
 
-    def merge(split_files, output_file):
+    def merge(self, output_file):
         """Merge spaln databases (not implemented)."""
         raise NotImplementedError("Merging spaln databases is not possible")
 
-    def split(cls, input_datasets, subdir_generator_function, split_params):
+    def split(self, input_datasets, subdir_generator_function, split_params):
         """Split a spaln database (not implemented)."""
         if split_params is None:
             return None

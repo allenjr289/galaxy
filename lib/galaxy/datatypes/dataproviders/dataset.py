@@ -64,12 +64,12 @@ class DatasetDataProvider(base.DataProvider):
         :returns: a dictionary of `column_count`, `column_types`, and `column_names`
             if they're available, setting each to `None` if not.
         """
-        # re-map keys to fit ColumnarProvider.__init__ kwargs
-        params = {}
-        params["column_count"] = dataset.metadata.columns
-        params["column_types"] = dataset.metadata.column_types
-        params["column_names"] = dataset.metadata.column_names or getattr(dataset.datatype, "column_names", None)
-        return params
+        return {
+            "column_count": dataset.metadata.columns,
+            "column_types": dataset.metadata.column_types,
+            "column_names": dataset.metadata.column_names
+            or getattr(dataset.datatype, "column_names", None),
+        }
 
     def get_metadata_column_types(self, indeces=None):
         """
@@ -124,19 +124,20 @@ class DatasetDataProvider(base.DataProvider):
         :raises KeyError: if column_names are not found
         :raises ValueError: if an entry in list_of_column_names is not in column_names
         """
-        metadata_column_names = (
-            self.dataset.metadata.column_names or getattr(self.dataset.datatype, "column_names", None) or None
-        )
-        if not metadata_column_names:
+        if metadata_column_names := (
+            self.dataset.metadata.column_names
+            or getattr(self.dataset.datatype, "column_names", None)
+            or None
+        ):
+            return [
+                metadata_column_names.index(column_name)
+                for column_name in list_of_column_names
+            ]
+
+        else:
             raise KeyError(
-                "No column_names found for " + f"datatype: {str(self.dataset.datatype)}, dataset: {str(self.dataset)}"
+                f"No column_names found for datatype: {str(self.dataset.datatype)}, dataset: {str(self.dataset)}"
             )
-        indeces = []  # if indeces and column_names:
-        # pull using indeces and re-name with given names - no need to alter (does as super would)
-        #    pass
-        for column_name in list_of_column_names:
-            indeces.append(metadata_column_names.index(column_name))
-        return indeces
 
     def get_metadata_column_index_by_name(self, name):
         """
@@ -158,8 +159,11 @@ class DatasetDataProvider(base.DataProvider):
         """
         region_column_names = ("chromCol", "startCol", "endCol")
         region_indices = [self.get_metadata_column_index_by_name(name) for name in region_column_names]
-        if check and not all(_ is not None for _ in region_indices):
-            raise ValueError(f"Could not determine proper column indices for chrom, start, end: {str(region_indices)}")
+        if check and any(_ is None for _ in region_indices):
+            raise ValueError(
+                f"Could not determine proper column indices for chrom, start, end: {region_indices}"
+            )
+
         return region_indices
 
 
@@ -203,7 +207,7 @@ class DatasetColumnarDataProvider(column.ColumnarDataProvider):
         """
         dataset_source = DatasetDataProvider(dataset)
         if not kwargs.get("column_types", None):
-            indeces = kwargs.get("indeces", None)
+            indeces = kwargs.get("indeces")
             kwargs["column_types"] = dataset_source.get_metadata_column_types(indeces=indeces)
         super().__init__(dataset_source, **kwargs)
 
@@ -238,19 +242,15 @@ class DatasetDictDataProvider(column.DictDataProvider):
 
         # TODO: getting too complicated - simplify at some lvl, somehow
         # if no column_types given, get column_types from indeces (or all if indeces == None)
-        indeces = kwargs.get("indeces", None)
-        column_names = kwargs.get("column_names", None)
+        indeces = kwargs.get("indeces")
+        column_names = kwargs.get("column_names")
 
         if not indeces and column_names:
             # pull columns by name
             indeces = kwargs["indeces"] = dataset_source.get_indeces_by_column_names(column_names)
 
-        elif indeces and not column_names:
+        elif indeces and not column_names or not indeces:
             # pull using indeces, name with meta
-            column_names = kwargs["column_names"] = dataset_source.get_metadata_column_names(indeces=indeces)
-
-        elif not indeces and not column_names:
-            # pull all indeces and name using metadata
             column_names = kwargs["column_names"] = dataset_source.get_metadata_column_names(indeces=indeces)
 
         # if no column_types given, use metadata column_types
@@ -308,12 +308,18 @@ class GenomicRegionDataProvider(column.ColumnarDataProvider):
         if end_column is None:
             end_column = dataset_source.get_metadata_column_index_by_name("endCol")
         indeces = [chrom_column, start_column, end_column]
-        if not all(_ is not None for _ in indeces):
-            raise ValueError("Could not determine proper column indeces for" + f" chrom, start, end: {str(indeces)}")
-        kwargs.update({"indeces": indeces})
+        if any(_ is None for _ in indeces):
+            raise ValueError(
+                f"Could not determine proper column indeces for chrom, start, end: {indeces}"
+            )
+
+        kwargs["indeces"] = indeces
 
         if not kwargs.get("column_types", None):
-            kwargs.update({"column_types": dataset_source.get_metadata_column_types(indeces=indeces)})
+            kwargs["column_types"] = dataset_source.get_metadata_column_types(
+                indeces=indeces
+            )
+
 
         self.named_columns = named_columns
         if self.named_columns:
@@ -404,9 +410,12 @@ class IntervalDataProvider(column.ColumnarDataProvider):
                 self.column_names.append("name")
                 indeces.append(name_column)
 
-        kwargs.update({"indeces": indeces})
+        kwargs["indeces"] = indeces
         if not kwargs.get("column_types", None):
-            kwargs.update({"column_types": dataset_source.get_metadata_column_types(indeces=indeces)})
+            kwargs["column_types"] = dataset_source.get_metadata_column_types(
+                indeces=indeces
+            )
+
 
         self.named_columns = named_columns
 
@@ -748,7 +757,7 @@ class SQliteDataTableProvider(base.DataProvider):
             for i, row in enumerate(results):
                 if i >= self.limit:
                     break
-                yield [val for val in row]
+                yield list(row)
         else:
             yield
 

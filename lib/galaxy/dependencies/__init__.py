@@ -286,10 +286,10 @@ class ConditionalDependencies:
         return os.environ.get("GALAXY_DEPENDENCIES_INSTALL_WEASYPRINT") == "1"
 
     def check_custos_sdk(self):
-        return "custos" == self.vault_type
+        return self.vault_type == "custos"
 
     def check_hvac(self):
-        return "hashicorp" == self.vault_type
+        return self.vault_type == "hashicorp"
 
     def check_pkce(self):
         return self.pkce_support
@@ -301,9 +301,9 @@ def optional(config_file=None):
     if not config_file:
         print("galaxy.dependencies.optional: no config file found", file=sys.stderr)
         return []
-    rval = []
     conditional = ConditionalDependencies(config_file)
-    for opt in conditional.conditional_reqs:
-        if conditional.check(opt.key):
-            rval.append(str(opt))
-    return rval
+    return [
+        str(opt)
+        for opt in conditional.conditional_reqs
+        if conditional.check(opt.key)
+    ]

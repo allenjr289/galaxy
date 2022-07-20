@@ -13,8 +13,7 @@ class FtpFilesSource(PyFilesystem2FilesSource):
 
     def _open_fs(self, user_context):
         props = self._serialization_props(user_context)
-        handle = FTPFS(**props)
-        return handle
+        return FTPFS(**props)
 
 
 __all__ = ("FtpFilesSource",)

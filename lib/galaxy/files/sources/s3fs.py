@@ -63,8 +63,7 @@ class S3FsFilesSource(BaseFilesSource):
     def _open_fs(self, user_context=None):
         if self._endpoint_url:
             self._props.update({"client_kwargs": {"endpoint_url": self._endpoint_url}})
-        fs = s3fs.S3FileSystem(**self._props)
-        return fs
+        return s3fs.S3FileSystem(**self._props)
 
     def _resource_info_to_dict(self, dir_path, resource_info):
         name = os.path.basename(resource_info["name"])
@@ -84,9 +83,11 @@ class S3FsFilesSource(BaseFilesSource):
             }
 
     def _serialization_props(self, user_context=None):
-        effective_props = {}
-        for key, val in self._props.items():
-            effective_props[key] = self._evaluate_prop(val, user_context=user_context)
+        effective_props = {
+            key: self._evaluate_prop(val, user_context=user_context)
+            for key, val in self._props.items()
+        }
+
         effective_props["bucket"] = self._bucket
         return effective_props
 

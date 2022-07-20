@@ -31,7 +31,7 @@ for line in open(tool_conf_file):
                 strtmp = strtmp + keys[n + 1]
             if keys[n].find("name") != -1:
                 strtmp = strtmp + keys[n + 1] + "-"
-            n = n + 1
+            n += 1
         tool_list.append(strtmp.replace(" ", "_"))
     if line.find("-->") != -1:
         onoff = 1
@@ -43,15 +43,13 @@ desc = []
 tool_infos = []
 for tool in tool_list:
     if tool.find("section") != -1:
-        tool_info = dict()
-        tool_info["id"] = tool
+        tool_info = {"id": tool}
         tool_infos.append(tool_info)
-    if os.path.exists("tools/" + tool):
-        for line in open("tools/" + tool):
+    if os.path.exists(f"tools/{tool}"):
+        for line in open(f"tools/{tool}"):
             if line.find("<tool ") != -1 and line.find("id") != -1:
                 keys = line.strip().split('"')
-                tool_info = dict()
-                tool_info["desc"] = ""
+                tool_info = {"desc": ""}
                 for n in range(len(keys) - 1):
                     if " id=" in keys[n]:
                         tool_info["id"] = keys[n + 1].replace(" ", "_")
@@ -63,8 +61,8 @@ for tool in tool_list:
                 break
 
 flag = 0
-if len(sys.argv) == 1:
-    for tool_info in tool_infos:
+for tool_info in tool_infos:
+    if len(sys.argv) == 1:
         if tool_info["id"].find("section") != -1:
             print(
                 "==========================================================================================================================================="
@@ -75,11 +73,10 @@ if len(sys.argv) == 1:
             )
         else:
             print("{:<45}\t{:<40}".format(tool_info["id"], tool_info["name"]))
-else:
-    for tool_info in tool_infos:
+    else:
         if tool_info["id"].find("section") != -1:
             flag = 0
         elif flag == 1:
-            print(" functional.test_toolbox:TestForTool_%s" % tool_info["id"], end=" ")
+            print(f' functional.test_toolbox:TestForTool_{tool_info["id"]}', end=" ")
         if tool_info["id"].replace("section::", "") == sys.argv[1]:
             flag = 1

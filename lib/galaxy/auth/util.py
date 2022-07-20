@@ -53,11 +53,7 @@ def get_authenticators(auth_config_file, auth_config_file_set):
 
         # check filterelem
         filter_elem = auth_elem.find("filter")
-        if filter_elem is not None:
-            filter_template = str(filter_elem.text)
-        else:
-            filter_template = None
-
+        filter_template = str(filter_elem.text) if filter_elem is not None else None
         # extract options
         options_elem = auth_elem.find("options")
         options = {}
@@ -74,7 +70,6 @@ def get_authenticators(auth_config_file, auth_config_file_set):
 
 
 def parse_auth_results(trans, auth_results, options):
-    auth_return = {}
     auth_result, auto_email, auto_username = auth_results[:3]
     auto_username = str(auto_username).lower()
     # make username unique
@@ -95,7 +90,7 @@ def parse_auth_results(trans, auth_results, options):
     else:
         raise Conflict("Cannot make unique username")
     log.debug(f"Email: {auto_email}, auto-register with username: {auto_username}")
-    auth_return["auto_reg"] = string_as_bool(options.get("auto-register", False))
+    auth_return = {"auto_reg": string_as_bool(options.get("auto-register", False))}
     auth_return["email"] = auto_email
     auth_return["username"] = auto_username
     auth_return["auto_create_roles"] = string_as_bool(options.get("auto-create-roles", False))

@@ -19,7 +19,7 @@ def parse_css_color(color):
         g = int(color[1], 16)
         b = int(color[2], 16)
     elif len(color) == 6:
-        r = int(color[0:2], 16)
+        r = int(color[:2], 16)
         g = int(color[2:4], 16)
         b = int(color[4:6], 16)
     else:

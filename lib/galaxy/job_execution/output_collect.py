@@ -74,8 +74,7 @@ class PermissionProvider(AbstractPermissionProvider):
     def permissions(self):
         if self._permissions is None:
             inp_data = self._inp_data
-            existing_datasets = [inp for inp in inp_data.values() if inp]
-            if existing_datasets:
+            if existing_datasets := [inp for inp in inp_data.values() if inp]:
                 permissions = self._security_agent.guess_derived_permissions_for_datasets(existing_datasets)
             else:
                 # No valid inputs, we will use history defaults
@@ -128,8 +127,7 @@ def collect_dynamic_outputs(
         elif destination_type == "hdca":
             # create or populate a dataset collection in the history
             assert "collection_type" in unnamed_output_dict
-            object_id = destination.get("object_id")
-            if object_id:
+            if object_id := destination.get("object_id"):
                 hdca = job_context.get_hdca(object_id)
             else:
                 name = unnamed_output_dict.get("name", "unnamed collection")
@@ -139,8 +137,7 @@ def collect_dynamic_outputs(
                 hdca = job_context.create_hdca(name, structure)
                 output_collections[name] = hdca
                 job_context.add_dataset_collection(hdca)
-            error_message = unnamed_output_dict.get("error_message")
-            if error_message:
+            if error_message := unnamed_output_dict.get("error_message"):
                 hdca.collection.handle_population_failed(error_message)
             else:
                 persist_elements_to_hdca(job_context, elements, hdca, collector=DEFAULT_DATASET_COLLECTOR)
@@ -283,11 +280,7 @@ class JobContext(BaseJobContext):
 
     @property
     def user(self):
-        if self.job:
-            user = self.job.user
-        else:
-            user = None
-        return user
+        return self.job.user if self.job else None
 
     def persist_object(self, obj):
         self.sa_session.add(obj)
@@ -298,27 +291,30 @@ class JobContext(BaseJobContext):
     def get_library_folder(self, destination):
         app = self.app
         library_folder_manager = app.library_folder_manager
-        library_folder = library_folder_manager.get(
-            self.work_context, app.security.decode_id(destination.get("library_folder_id"))
+        return library_folder_manager.get(
+            self.work_context,
+            app.security.decode_id(destination.get("library_folder_id")),
         )
-        return library_folder
 
     def get_hdca(self, object_id):
-        hdca = self.sa_session.query(HistoryDatasetCollectionAssociation).get(int(object_id))
-        return hdca
+        return self.sa_session.query(HistoryDatasetCollectionAssociation).get(
+            int(object_id)
+        )
 
     def create_library_folder(self, parent_folder, name, description):
         assert parent_folder.id
         library_folder_manager = self.app.library_folder_manager
-        nested_folder = library_folder_manager.create(self.work_context, parent_folder.id, name, description)
-        return nested_folder
+        return library_folder_manager.create(
+            self.work_context, parent_folder.id, name, description
+        )
 
     def create_hdca(self, name, structure):
         history = self.job.history
         trans = self.work_context
         collection_manager = self.app.dataset_collection_manager
-        hdca = collection_manager.precreate_dataset_collection_instance(trans, history, name, structure=structure)
-        return hdca
+        return collection_manager.precreate_dataset_collection_instance(
+            trans, history, name, structure=structure
+        )
 
     def add_output_dataset_association(self, name, dataset):
         assoc = JobToOutputDatasetAssociation(name, dataset)
@@ -370,15 +366,11 @@ class JobContext(BaseJobContext):
         tool = self.tool
         if name not in tool.output_collections:
             return None
-        output_collection_def = tool.output_collections[name]
-        return output_collection_def
+        return tool.output_collections[name]
 
     def output_def(self, name):
         tool = self.tool
-        if name not in tool.outputs:
-            return None
-        output_collection_def = tool.outputs[name]
-        return output_collection_def
+        return None if name not in tool.outputs else tool.outputs[name]
 
     def job_id(self):
         return self.job.id
@@ -418,8 +410,7 @@ class SessionlessJobContext(SessionlessModelPersistenceContext, BaseJobContext):
             return False
 
         output_collection_def_dict = output_collection_defs[name]
-        output_collection_def = ToolOutputCollection.from_dict(name, output_collection_def_dict)
-        return output_collection_def
+        return ToolOutputCollection.from_dict(name, output_collection_def_dict)
 
     def output_def(self, name):
         tool_as_dict = self.metadata_params["tool"]
@@ -428,8 +419,7 @@ class SessionlessJobContext(SessionlessModelPersistenceContext, BaseJobContext):
             return None
 
         output_def_dict = output_defs[name]
-        output_def = ToolOutput.from_dict(name, output_def_dict)
-        return output_def
+        return ToolOutput.from_dict(name, output_def_dict)
 
     def job_id(self):
         return "non-session bound job"
@@ -438,8 +428,8 @@ class SessionlessJobContext(SessionlessModelPersistenceContext, BaseJobContext):
         hdca = self.import_store.sa_session.query(HistoryDatasetCollectionAssociation).find(int(object_id))
         if hdca:
             self.export_store.add_dataset_collection(hdca)
+            include_files = True
             for collection_dataset in hdca.dataset_instances:
-                include_files = True
                 self.export_store.add_dataset(collection_dataset, include_files=include_files)
                 self.export_store.collection_datasets.add(collection_dataset.id)
 
@@ -447,8 +437,8 @@ class SessionlessJobContext(SessionlessModelPersistenceContext, BaseJobContext):
 
     def add_dataset_collection(self, collection):
         self.export_store.add_dataset_collection(collection)
+        include_files = True
         for collection_dataset in collection.dataset_instances:
-            include_files = True
             self.export_store.add_dataset(collection_dataset, include_files=include_files)
             self.export_store.collection_datasets.add(collection_dataset.id)
 
@@ -521,8 +511,9 @@ def collect_primary_datasets(job_context: Union[JobContext, SessionlessJobContex
             )
             extra_files = None
             if new_primary_datasets_attributes:
-                extra_files_path = new_primary_datasets_attributes.get("extra_files", None)
-                if extra_files_path:
+                if extra_files_path := new_primary_datasets_attributes.get(
+                    "extra_files", None
+                ):
                     extra_files = os.path.join(job_working_directory, extra_files_path)
             primary_data = job_context.create_dataset(
                 ext,
@@ -549,8 +540,7 @@ def collect_primary_datasets(job_context: Union[JobContext, SessionlessJobContex
             outdata.set_meta()
             outdata.set_peek()
             outdata.discovered = True
-            sa_session = job_context.sa_session
-            if sa_session:
+            if sa_session := job_context.sa_session:
                 sa_session.add(outdata)
 
     # Move discovered outputs to storage and set metdata / peeks
@@ -614,10 +604,15 @@ def walk_over_extra_files(target_dir, extra_file_collector, job_working_director
                     if match:
                         yield match
 
-    for match in extra_file_collector.sort(
-        _walk(target_dir, extra_file_collector, job_working_directory, matchable, parent_paths)
-    ):
-        yield match
+    yield from extra_file_collector.sort(
+        _walk(
+            target_dir,
+            extra_file_collector,
+            job_working_directory,
+            matchable,
+            parent_paths,
+        )
+    )
 
 
 def dataset_collector(dataset_collection_description):
@@ -625,11 +620,10 @@ def dataset_collector(dataset_collection_description):
         # Use 'is' and 'in' operators, so lets ensure this is
         # treated like a singleton.
         return DEFAULT_DATASET_COLLECTOR
+    if dataset_collection_description.discover_via == "pattern":
+        return DatasetCollector(dataset_collection_description)
     else:
-        if dataset_collection_description.discover_via == "pattern":
-            return DatasetCollector(dataset_collection_description)
-        else:
-            return ToolMetadataDatasetCollector(dataset_collection_description)
+        return ToolMetadataDatasetCollector(dataset_collection_description)
 
 
 class ToolMetadataDatasetCollector:
@@ -660,20 +654,18 @@ class DatasetCollector:
         self.match_relative_path = dataset_collection_description.match_relative_path
 
     def _pattern_for_dataset(self, dataset_instance=None):
-        token_replacement = r"\d+"
-        if dataset_instance:
-            token_replacement = str(dataset_instance.id)
+        token_replacement = str(dataset_instance.id) if dataset_instance else r"\d+"
         return self.pattern.replace(DATASET_ID_TOKEN, token_replacement)
 
     def match(self, dataset_instance, filename, path=None, parent_paths=None):
         pattern = self._pattern_for_dataset(dataset_instance)
         if self.match_relative_path and parent_paths:
             filename = os.path.join(*parent_paths, filename)
-        re_match = re.match(pattern, filename)
-        match_object = None
-        if re_match:
-            match_object = RegexCollectedDatasetMatch(re_match, self, filename, path=path)
-        return match_object
+        return (
+            RegexCollectedDatasetMatch(re_match, self, filename, path=path)
+            if (re_match := re.match(pattern, filename))
+            else None
+        )
 
     def sort(self, matches):
         reverse = self.sort_reverse

@@ -75,10 +75,7 @@ class PAM(AuthProvider):
                 pam_username = email_user
                 if email_domain == options.get("maildomain", None):
                     auto_register_email = email
-                    if username is not None:
-                        auto_register_username = username
-                    else:
-                        auto_register_username = email_user
+                    auto_register_username = username if username is not None else email_user
                 else:
                     log.debug("PAM authenticate: warning: email does not match configured PAM maildomain")
                     # no need to fail: if auto-register is not enabled, this
@@ -131,10 +128,7 @@ class PAM(AuthProvider):
                             f"PAM auth: external authentication script had errors: status {e.returncode} error {e.stderr}"
                         )
                     output = e.stdout
-                if output.strip() == "True":
-                    authenticated = True
-                else:
-                    authenticated = False
+                authenticated = output.strip() == "True"
         else:
             try:
                 import pam

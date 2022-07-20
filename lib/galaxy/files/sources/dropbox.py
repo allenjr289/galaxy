@@ -13,8 +13,7 @@ class DropboxFilesSource(PyFilesystem2FilesSource):
 
     def _open_fs(self, user_context):
         props = self._serialization_props(user_context)
-        handle = DropboxFS(**props)
-        return handle
+        return DropboxFS(**props)
 
 
 __all__ = ("DropboxFilesSource",)

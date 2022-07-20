@@ -100,10 +100,7 @@ class ConfiguredFileSources:
             id_prefix = None
             path = rest
         else:
-            if "/" in rest:
-                id_prefix, path = rest.split("/", 1)
-            else:
-                id_prefix, path = rest, "/"
+            id_prefix, path = rest.split("/", 1) if "/" in rest else (rest, "/")
         file_source = self.get_file_source(id_prefix, scheme)
         return FileSourcePath(file_source, path)
 
@@ -159,10 +156,7 @@ class ConfiguredFileSources:
         return False
 
     def get_schemes(self):
-        schemes = set()
-        for file_source in self._file_sources:
-            schemes.add(file_source.get_scheme())
-        return schemes
+        return {file_source.get_scheme() for file_source in self._file_sources}
 
     def plugins_to_dict(
         self, for_serialization: bool = False, user_context: Optional["FileSourceDictifiable"] = None
@@ -234,12 +228,18 @@ class ConfiguredFileSourcesConfig:
     def from_app_config(config):
         # Formalize what we read in from config to create a more clear interface
         # for this component.
-        kwds = {}
-        kwds["symlink_allowlist"] = getattr(config, "user_library_import_symlink_allowlist", [])
-        kwds["library_import_dir"] = getattr(config, "library_import_dir", None)
-        kwds["user_library_import_dir"] = getattr(config, "user_library_import_dir", None)
-        kwds["ftp_upload_dir"] = getattr(config, "ftp_upload_dir", None)
-        kwds["ftp_upload_purge"] = getattr(config, "ftp_upload_purge", True)
+        kwds = {
+            "symlink_allowlist": getattr(
+                config, "user_library_import_symlink_allowlist", []
+            ),
+            "library_import_dir": getattr(config, "library_import_dir", None),
+            "user_library_import_dir": getattr(
+                config, "user_library_import_dir", None
+            ),
+            "ftp_upload_dir": getattr(config, "ftp_upload_dir", None),
+            "ftp_upload_purge": getattr(config, "ftp_upload_purge", True),
+        }
+
         return ConfiguredFileSourcesConfig(**kwds)
 
     def to_dict(self):
@@ -276,7 +276,7 @@ class FileSourceDictifiable(Dictifiable):
         raise NotImplementedError
 
     @property
-    def group_names(sefl) -> Set[str]:
+    def group_names(self) -> Set[str]:
         raise NotImplementedError
 
 

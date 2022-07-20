@@ -58,11 +58,9 @@ class Amos(data.Text):
         for line in file_prefix.line_iterator():
             if not line:
                 break  # EOF
-            line = line.strip()
-            if line:  # first non-empty line
-                if line.startswith("{"):
-                    if re.match(r"{(RED|CTG|TLE)$", line):
-                        return True
+            if line := line.strip():
+                if line.startswith("{") and re.match(r"{(RED|CTG|TLE)$", line):
+                    return True
         return False
 
 
@@ -85,18 +83,14 @@ class Sequences(sequence.Fasta):
         """
         fh = file_prefix.string_io()
         for line in fh:
-            line = line.strip()
-            if line:  # first non-empty line
-                if line.startswith(">"):
-                    if not re.match(r">[^\t]+\t\d+\t\d+$", line):
-                        return False
-                    # The next line.strip() must not be '', nor startwith '>'
-                    line = fh.readline().strip()
-                    if line == "" or line.startswith(">"):
-                        return False
-                    return True
-                else:
+            if line := line.strip():
+                if not line.startswith(">"):
                     return False
+                if not re.match(r">[^\t]+\t\d+\t\d+$", line):
+                    return False
+                # The next line.strip() must not be '', nor startwith '>'
+                line = fh.readline().strip()
+                return line != "" and not line.startswith(">")
         return False
 
 
@@ -118,8 +112,7 @@ class Roadmaps(data.Text):
 
         fh = file_prefix.string_io()
         for line in fh:
-            line = line.strip()
-            if line:  # first non-empty line
+            if line := line.strip():
                 if not re.match(r"\d+\t\d+\t\d+$", line):
                     return False
                 # The next line.strip() should be 'ROADMAP 1'
@@ -171,8 +164,11 @@ class Velvet(Html):
 
     def generate_primary_file(self, dataset=None):
         log.debug(f"Velvet log info  JJ generate_primary_file {dataset}")
-        rval = ["<html><head><title>Velvet Galaxy Composite Dataset </title></head><p/>"]
-        rval.append("<div>This composite dataset is composed of the following files:<p/><ul>")
+        rval = [
+            "<html><head><title>Velvet Galaxy Composite Dataset </title></head><p/>",
+            "<div>This composite dataset is composed of the following files:<p/><ul>",
+        ]
+
         for composite_name, composite_file in self.get_composite_files(dataset=dataset).items():
             fn = composite_name
             log.debug(f"Velvet log info  JJ generate_primary_file {fn} {composite_file}")
@@ -192,7 +188,7 @@ class Velvet(Html):
         """
         cannot do this until we are setting metadata
         """
-        log.debug(f"Velvet log info  {'JJ regenerate_primary_file'}")
+        log.debug('Velvet log info  JJ regenerate_primary_file')
         gen_msg = ""
         try:
             efp = dataset.extra_files_path
@@ -217,10 +213,12 @@ class Velvet(Html):
         except Exception:
             log.debug(f"Velveth could not read Log file in {efp}")
         log.debug(f"Velveth log info  {gen_msg}")
-        rval = ["<html><head><title>Velvet Galaxy Composite Dataset </title></head><p/>"]
-        # rval.append('<div>Generated:<p/><code> %s </code></div>' %(re.sub('\n','<br>',log_msg)))
-        rval.append(f"<div>Generated:<p/> {gen_msg} </div>")
-        rval.append("<div>Velveth dataset:<p/><ul>")
+        rval = [
+            "<html><head><title>Velvet Galaxy Composite Dataset </title></head><p/>",
+            f"<div>Generated:<p/> {gen_msg} </div>",
+            "<div>Velveth dataset:<p/><ul>",
+        ]
+
         for composite_name, composite_file in self.get_composite_files(dataset=dataset).items():
             fn = composite_name
             log.debug(f"Velvet log info  JJ regenerate_primary_file {fn} {composite_file}")

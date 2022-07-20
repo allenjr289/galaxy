@@ -52,12 +52,9 @@ class HasSettings(type):
         settings = {}
         # get settings defined in base classes
         for base_class in base_classes:
-            base_settings = getattr(base_class, "settings", None)
-            if base_settings:
-                settings.update(base_settings)
-        # get settings defined in this class
-        new_settings = attributes.pop("settings", None)
-        if new_settings:
+            if base_settings := getattr(base_class, "settings", None):
+                settings |= base_settings
+        if new_settings := attributes.pop("settings", None):
             settings.update(new_settings)
         attributes["settings"] = settings
         return type.__new__(cls, name, base_classes, attributes)
@@ -162,7 +159,7 @@ class DataProvider(metaclass=HasSettings):
         """
         # we need to protect against recursion (in __getattr__) if self.source hasn't been set
         source_str = str(self.source) if hasattr(self, "source") else ""
-        return f"{self.__class__.__name__}({str(source_str)})"
+        return f"{self.__class__.__name__}({source_str})"
 
 
 class FilteredDataProvider(DataProvider):
@@ -215,10 +212,7 @@ class FilteredDataProvider(DataProvider):
 
         Meant to be overridden.
         """
-        if self.filter_fn:
-            return self.filter_fn(datum)
-        # also can be overriden entirely
-        return datum
+        return self.filter_fn(datum) if self.filter_fn else datum
 
 
 class LimitedOffsetDataProvider(FilteredDataProvider):
@@ -311,5 +305,4 @@ class MultiSourceDataProvider(DataProvider):
             except exceptions.InvalidDataProviderSource:
                 continue
 
-            parent_gen = super().__iter__()
-            yield from parent_gen
+            yield from super().__iter__()

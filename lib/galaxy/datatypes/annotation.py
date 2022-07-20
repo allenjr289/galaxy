@@ -73,18 +73,18 @@ class Augustus(CompressedArchive):
                 for f in temptar:
                     if not f.isfile():
                         continue
-                    if (
-                        f.name.endswith("_exon_probs.pbl")
-                        or f.name.endswith("_igenic_probs.pbl")
-                        or f.name.endswith("_intron_probs.pbl")
-                        or f.name.endswith("_metapars.cfg")
-                        or f.name.endswith("_metapars.utr.cfg")
-                        or f.name.endswith("_parameters.cfg")
-                        or f.name.endswith("_parameters.cgp.cfg")
-                        or f.name.endswith("_utr_probs.pbl")
-                        or f.name.endswith("_weightmatrix.txt")
-                    ):
-                        return True
-                    else:
-                        return False
+                    return bool(
+                        (
+                            f.name.endswith("_exon_probs.pbl")
+                            or f.name.endswith("_igenic_probs.pbl")
+                            or f.name.endswith("_intron_probs.pbl")
+                            or f.name.endswith("_metapars.cfg")
+                            or f.name.endswith("_metapars.utr.cfg")
+                            or f.name.endswith("_parameters.cfg")
+                            or f.name.endswith("_parameters.cgp.cfg")
+                            or f.name.endswith("_utr_probs.pbl")
+                            or f.name.endswith("_weightmatrix.txt")
+                        )
+                    )
+
         return False

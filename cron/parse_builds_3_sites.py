@@ -17,19 +17,19 @@ names = ["main", "archaea", "test"]
 
 def main():
     for i in range(len(sites)):
-        site = sites[i] + "das/dsn"
-        trackurl = sites[i] + "hgTracks?"
+        site = f"{sites[i]}das/dsn"
+        trackurl = f"{sites[i]}hgTracks?"
         builds = []
         try:
             text = requests.get(site).text
         except Exception:
-            print("#Unable to connect to " + site)
+            print(f"#Unable to connect to {site}")
             continue
 
         try:
             tree = ElementTree.fromstring(text)
         except Exception:
-            print("#Invalid xml passed back from " + site)
+            print(f"#Invalid xml passed back from {site}")
             continue
         print("#Harvested from", site)
 

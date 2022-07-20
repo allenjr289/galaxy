@@ -36,7 +36,7 @@ def __main__():
             if not line or line.startswith("#"):
                 continue
             fastq_block_lines = (fastq_block_lines + 1) % 4
-            line_startswith = line[0:1]
+            line_startswith = line[:1]
             if fastq_block_lines == 1:
                 # first line is @title_of_seq
                 if not seq_title_startswith:
@@ -59,13 +59,11 @@ def __main__():
                         'Invalid fastqsolexa format at line %d: sequence title "%s" differes from score title "%s".'
                         % (i + 1, read_title, quality_title)
                     )
-                if not quality_title:
-                    outfile_score.write(f">{read_title}\n")
-                else:
+                if quality_title:
                     outfile_score.write(f">{line[1:]}\n")
+                else:
+                    outfile_score.write(f">{read_title}\n")
             else:
-                # fourth line is quality scores
-                qual = ""
                 fastq_integer = True
                 # peek: ascii or digits?
                 val = line.split()[0]
@@ -76,13 +74,14 @@ def __main__():
                 except ValueError:
                     fastq_integer = False
 
+                qual = ""
                 if fastq_integer:  # digits
                     qual = line
                 else:
                     # ascii
                     quality_score_length = len(line)
                     if quality_score_length == read_length + 1:
-                        quality_score_startswith = ord(line[0:1])
+                        quality_score_startswith = ord(line[:1])
                         line = line[1:]
                     elif quality_score_length == read_length:
                         quality_score_startswith = default_coding_value

@@ -40,7 +40,7 @@ class MessageException(Exception):
         exception_class = MessageException
         if status_code == 404:
             exception_class = ObjectNotFound
-        elif status_code / 100 == 5:
+        elif status_code == 500:
             exception_class = InternalServerError
         return exception_class(message)
 

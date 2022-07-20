@@ -48,18 +48,16 @@ for _tag in reversed(tags):
             simpleversioning_versions.append({"id": f"release_{_ver}", "name": _ver})
 
 if re.fullmatch(r"release_\d{2}\.\d{2}", TARGET_GIT_BRANCH):
-    if _stable:
-        # The current stable release will go here but fail the next conditional, avoiding either banner.
-        if TARGET_GIT_BRANCH != f"release_{_stable}":
-            simpleversioning_show_banner = True
-            _target_ver = TARGET_GIT_BRANCH[len("release_") :]
-            if Version(_target_ver) > Version(_stable):
-                # Pre-release
-                # Insert it between master and _stable
-                simpleversioning_versions.insert(2, {"id": TARGET_GIT_BRANCH, "name": _target_ver})
-                simpleversioning_banner_message = PRE_BANNER + BANNER_APPEND
-            else:
-                simpleversioning_banner_message = OLD_BANNER + BANNER_APPEND
+    if _stable and TARGET_GIT_BRANCH != f"release_{_stable}":
+        simpleversioning_show_banner = True
+        _target_ver = TARGET_GIT_BRANCH[len("release_") :]
+        if Version(_target_ver) > Version(_stable):
+            # Pre-release
+            # Insert it between master and _stable
+            simpleversioning_versions.insert(2, {"id": TARGET_GIT_BRANCH, "name": _target_ver})
+            simpleversioning_banner_message = PRE_BANNER + BANNER_APPEND
+        else:
+            simpleversioning_banner_message = OLD_BANNER + BANNER_APPEND
 elif TARGET_GIT_BRANCH != "master":
     if TARGET_GIT_BRANCH != "dev":
         # Feature branch

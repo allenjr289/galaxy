@@ -13,8 +13,7 @@ class BaseSpaceFilesSource(PyFilesystem2FilesSource):
 
     def _open_fs(self, user_context):
         props = self._serialization_props(user_context)
-        handle = BASESPACEFS(**props)
-        return handle
+        return BASESPACEFS(**props)
 
 
 __all__ = ("BaseSpaceFilesSource",)

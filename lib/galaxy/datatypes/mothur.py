@@ -52,7 +52,6 @@ class Otu(Text):
 
         if dataset.has_data():
             label_names = set()
-            otulabel_names = set()
             ncols = 0
             data_lines = 0
             comment_lines = 0
@@ -61,9 +60,7 @@ class Otu(Text):
             first_line = get_headers(dataset.file_name, sep="\t", count=1)
             if first_line:
                 first_line = first_line[0]
-            # set otulabels
-            if len(first_line) > 2:
-                otulabel_names = first_line[2:]
+            otulabel_names = first_line[2:] if len(first_line) > 2 else set()
             # set label names and number of lines
             for line in headers:
                 if len(line) >= 2 and not line[0].startswith("@"):
@@ -104,10 +101,7 @@ class Otu(Text):
                     except ValueError:
                         return False
                 count += 1
-        if count > 2:
-            return True
-
-        return False
+        return count > 2
 
 
 class Sabund(Otu):
@@ -150,10 +144,7 @@ class Sabund(Otu):
                 except ValueError:
                     return False
                 count += 1
-        if count > 0:
-            return True
-
-        return False
+        return count > 0
 
 
 class GroupAbund(Otu):
@@ -230,9 +221,7 @@ class GroupAbund(Otu):
                     except ValueError:
                         return False
                 count += 1
-        if count > 1:
-            return True
-        return False
+        return count > 1
 
 
 @build_sniff_from_prefix
@@ -275,9 +264,7 @@ class SecondaryStructureMap(Tabular):
                         return False
             except (ValueError, KeyError):
                 return False
-        if line_num < 3:
-            return False
-        return True
+        return line_num >= 3
 
 
 class AlignCheck(Tabular):
@@ -402,12 +389,11 @@ class LowerTriangleDistanceMatrix(DistanceMatrix):
                 if line_num == 0:
                     if len(line) > 2:
                         return False
-                    else:
-                        try:
-                            sequence_count = int("".join(line))
-                            assert sequence_count > 0
-                        except ValueError:
-                            return False
+                    try:
+                        sequence_count = int("".join(line))
+                        assert sequence_count > 0
+                    except ValueError:
+                        return False
                 else:
                     # number of fields should equal the line number
                     if len(line) != (line_num):
@@ -421,10 +407,7 @@ class LowerTriangleDistanceMatrix(DistanceMatrix):
                 line_num += 1
 
         # check if the number of lines in the file was as expected
-        if line_num == sequence_count + 1 or line_num == numlines + 1:
-            return True
-
-        return False
+        return line_num in [sequence_count + 1, numlines + 1]
 
 
 @build_sniff_from_prefix
@@ -465,12 +448,11 @@ class SquareDistanceMatrix(DistanceMatrix):
                 if line_num == 0:
                     if len(line) > 2:
                         return False
-                    else:
-                        try:
-                            sequence_count = int("".join(line))
-                            assert sequence_count > 0
-                        except ValueError:
-                            return False
+                    try:
+                        sequence_count = int("".join(line))
+                        assert sequence_count > 0
+                    except ValueError:
+                        return False
                 else:
                     # number of fields should equal the number of sequences
                     if len(line) != sequence_count + 1:
@@ -484,10 +466,7 @@ class SquareDistanceMatrix(DistanceMatrix):
                 line_num += 1
 
         # check if the number of lines in the file was as expected
-        if line_num == sequence_count + 1 or line_num == numlines + 1:
-            return True
-
-        return False
+        return line_num in [sequence_count + 1, numlines + 1]
 
 
 @build_sniff_from_prefix
@@ -546,10 +525,7 @@ class PairwiseDistanceMatrix(DistanceMatrix, Tabular):
         if not names[0] or not names[1]:
             return False
 
-        if count > 2:
-            return not all_ints
-
-        return False
+        return not all_ints if count > 2 else False
 
 
 class Names(Tabular):
@@ -591,11 +567,8 @@ class Group(Tabular):
     def set_meta(self, dataset, overwrite=True, skip=None, max_data_lines=None, **kwd):
         super().set_meta(dataset, overwrite, skip, max_data_lines)
 
-        group_names = set()
         headers = iter_headers(dataset.file_name, sep="\t", count=-1)
-        for line in headers:
-            if len(line) > 1:
-                group_names.add(line[1])
+        group_names = {line[1] for line in headers if len(line) > 1}
         dataset.metadata.groups = list(group_names)
 
 
@@ -638,10 +611,7 @@ class Oligos(Text):
                     continue
                 else:
                     return False
-        if count > 0:
-            return True
-
-        return False
+        return count > 0
 
 
 @build_sniff_from_prefix
@@ -701,10 +671,7 @@ class Frequency(Tabular):
                         return False
                 count += 1
 
-        if count > 1:
-            return True
-
-        return False
+        return count > 1
 
 
 @build_sniff_from_prefix
@@ -769,10 +736,7 @@ class Quantile(Tabular):
                 except Exception:
                     return False
                 count += 1
-        if count > 0:
-            return True
-
-        return False
+        return count > 0
 
 
 @build_sniff_from_prefix
@@ -799,10 +763,7 @@ class LaneMask(Text):
             # these filter files should be relatively big
             return False
 
-        if not re.match("^[01]+$", headers[0][0]):
-            return False
-
-        return True
+        return bool(re.match("^[01]+$", headers[0][0]))
 
 
 class CountTable(Tabular):
@@ -907,11 +868,7 @@ class RefTaxonomy(Tabular):
                         return False
                 count += 1
 
-        if count > 0:
-            # Require that at least one entry has semicolons in the 2nd column
-            return found_semicolons
-
-        return False
+        return found_semicolons if count > 0 else False
 
 
 class ConsensusTaxonomy(Tabular):
@@ -995,10 +952,7 @@ class Axes(Tabular):
                         return False
             count += 1
 
-        if count > 0:
-            return not all_integers
-
-        return False
+        return not all_integers if count > 0 else False
 
 
 class SffFlow(Tabular):
@@ -1049,10 +1003,7 @@ class SffFlow(Tabular):
         if skipchars is None:
             skipchars = []
         try:
-            out = '<table cellspacing="0" cellpadding="3">'
-
-            # Generate column header
-            out += "<tr>"
+            out = '<table cellspacing="0" cellpadding="3">' + "<tr>"
             out += "<th>1. Name</th>"
             out += "<th>2. Flows</th>"
             for i in range(3, dataset.metadata.columns + 1):

@@ -69,19 +69,18 @@ class PyFilesystem2FilesSource(BaseFilesSource):
         uri = self.uri_from_path(path)
         if resource_info.is_dir:
             return {"class": "Directory", "name": name, "uri": uri, "path": path}
-        else:
-            created = resource_info.created
-            return {
-                "class": "File",
-                "name": name,
-                "size": resource_info.size,
-                "ctime": self.to_dict_time(created),
-                "uri": uri,
-                "path": path,
-            }
+        created = resource_info.created
+        return {
+            "class": "File",
+            "name": name,
+            "size": resource_info.size,
+            "ctime": self.to_dict_time(created),
+            "uri": uri,
+            "path": path,
+        }
 
     def _serialization_props(self, user_context=None):
-        effective_props = {}
-        for key, val in self._props.items():
-            effective_props[key] = self._evaluate_prop(val, user_context=user_context)
-        return effective_props
+        return {
+            key: self._evaluate_prop(val, user_context=user_context)
+            for key, val in self._props.items()
+        }

@@ -63,15 +63,13 @@ def get_galaxy_app():
 
 @lru_cache(maxsize=1)
 def build_app():
-    kwargs = get_app_properties()
-    if kwargs:
+    if kwargs := get_app_properties():
         kwargs["check_migrate_databases"] = False
         kwargs["use_display_applications"] = False
         kwargs["use_converters"] = False
         import galaxy.app
 
-        galaxy_app = galaxy.app.GalaxyManagerApplication(configure_logging=False, **kwargs)
-        return galaxy_app
+        return galaxy.app.GalaxyManagerApplication(configure_logging=False, **kwargs)
 
 
 @lru_cache(maxsize=1)
@@ -92,35 +90,30 @@ def get_app_properties():
 
 @lru_cache(maxsize=1)
 def get_config():
-    kwargs = get_app_properties()
-    if kwargs:
+    if kwargs := get_app_properties():
         kwargs["override_tempdir"] = False
         return Configuration(**kwargs)
 
 
 def get_broker():
-    config = get_config()
-    if config:
+    if config := get_config():
         return config.celery_broker or config.amqp_internal_connection
 
 
 def get_backend():
-    config = get_config()
-    if config:
+    if config := get_config():
         return config.celery_backend
 
 
 def get_history_audit_table_prune_interval():
-    config = get_config()
-    if config:
+    if config := get_config():
         return config.history_audit_table_prune_interval
     else:
         return 3600
 
 
 def get_cleanup_short_term_storage_interval():
-    config = get_config()
-    if config:
+    if config := get_config():
         return config.short_term_storage_cleanup_interval
     else:
         return 3600
@@ -214,10 +207,7 @@ def galaxy_task(*args, action=None, **celery_task_kwd):
 
         return wrapper
 
-    if len(args) == 1 and callable(args[0]):
-        return decorate(args[0])
-    else:
-        return decorate
+    return decorate(args[0]) if len(args) == 1 and callable(args[0]) else decorate
 
 
 if __name__ == "__main__":

@@ -104,27 +104,25 @@ class PosixFilesSource(BaseFilesSource):
         uri = self.uri_from_path(rel_path)
         if os.path.isdir(full_path):
             return {"class": "Directory", "name": name, "uri": uri, "path": rel_path}
-        else:
-            statinfo = os.lstat(full_path)
-            return {
-                "class": "File",
-                "name": name,
-                "size": statinfo.st_size,
-                "ctime": self.to_dict_time(statinfo.st_ctime),
-                "uri": uri,
-                "path": rel_path,
-            }
+        statinfo = os.lstat(full_path)
+        return {
+            "class": "File",
+            "name": name,
+            "size": statinfo.st_size,
+            "ctime": self.to_dict_time(statinfo.st_ctime),
+            "uri": uri,
+            "path": rel_path,
+        }
 
     def _safe_directory(self, directory):
-        if self.enforce_symlink_security:
-            if not safe_path(directory, allowlist=self._allowlist):
-                raise exceptions.ConfigDoesNotAllowException(
-                    f"directory ({directory}) is a symlink to a location not on the allowlist"
-                )
+        if self.enforce_symlink_security and not safe_path(
+            directory, allowlist=self._allowlist
+        ):
+            raise exceptions.ConfigDoesNotAllowException(
+                f"directory ({directory}) is a symlink to a location not on the allowlist"
+            )
 
-        if not os.path.exists(directory):
-            return False
-        return True
+        return bool(os.path.exists(directory))
 
     def _serialization_props(self, user_context=None):
         return {

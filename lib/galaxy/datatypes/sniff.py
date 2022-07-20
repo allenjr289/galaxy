@@ -50,8 +50,7 @@ BINARY_MIMETYPES = {"application/pdf", "application/vnd.openxmlformats-officedoc
 def get_test_fname(fname):
     """Returns test data filename"""
     path, name = os.path.split(__file__)
-    full_path = os.path.join(path, "test", fname)
-    return full_path
+    return os.path.join(path, "test", fname)
 
 
 def sniff_with_cls(cls, fname):
@@ -140,12 +139,11 @@ def convert_newlines(
             converted_newlines = True
             i += 1
             fp.write(b"\n")
-    if in_place:
-        shutil.move(fp.name, fname)
-        # Return number of lines in file.
-        return ConvertResult(i, None, converted_newlines, converted_regex)
-    else:
+    if not in_place:
         return ConvertResult(i, fp.name, converted_newlines, converted_regex)
+    shutil.move(fp.name, fname)
+    # Return number of lines in file.
+    return ConvertResult(i, None, converted_newlines, converted_regex)
 
 
 def convert_sep2tabs(
@@ -164,24 +162,20 @@ def convert_sep2tabs(
     converted_newlines = False
     converted_regex = False
     with tempfile.NamedTemporaryFile(mode="wb", prefix=tmp_prefix, dir=tmp_dir, delete=False) as fp, open(
-        fname, mode="rb"
-    ) as fi:
-        block = fi.read(block_size)
-        while block:
-            if block:
-                split_block = regexp.split(block)
-                if len(split_block) > 1:
-                    converted_regex = True
-                block = b"\t".join(split_block)
-                fp.write(block)
-                i += block.count(b"\n") or block.count(b"\r")
-                block = fi.read(block_size)
-    if in_place:
-        shutil.move(fp.name, fname)
-        # Return number of lines in file.
-        return ConvertResult(i, None, converted_newlines, converted_regex)
-    else:
+            fname, mode="rb"
+        ) as fi:
+        while block := fi.read(block_size):
+            split_block = regexp.split(block)
+            if len(split_block) > 1:
+                converted_regex = True
+            block = b"\t".join(split_block)
+            fp.write(block)
+            i += block.count(b"\n") or block.count(b"\r")
+    if not in_place:
         return ConvertResult(i, fp.name, converted_newlines, converted_regex)
+    shutil.move(fp.name, fname)
+    # Return number of lines in file.
+    return ConvertResult(i, None, converted_newlines, converted_regex)
 
 
 def convert_newlines_sep2tabs(
@@ -521,9 +515,8 @@ def guess_ext(fname_or_file_prefix: Union[str, "FilePrefix"], sniff_order, is_bi
     # Ugly hack for tsv vs tabular sniffing, we want to prefer tabular
     # to tsv but it doesn't have a sniffer - is TSV was sniffed just check
     # if it is an okay tabular and use that instead.
-    if file_ext == "tsv":
-        if is_column_based(file_prefix, "\t", 1):
-            file_ext = "tabular"
+    if file_ext == "tsv" and is_column_based(file_prefix, "\t", 1):
+        file_ext = "tabular"
     if file_ext is not None:
         return file_ext
 
@@ -534,9 +527,7 @@ def guess_ext(fname_or_file_prefix: Union[str, "FilePrefix"], sniff_order, is_bi
         get_headers(file_prefix, None)
     except UnicodeDecodeError:
         return "data"  # default data type file extension
-    if is_column_based(file_prefix, "\t", 1):
-        return "tabular"  # default tabular data type file extension
-    return "txt"  # default text data type file extension
+    return "tabular" if is_column_based(file_prefix, "\t", 1) else "txt"
 
 
 def guess_ext_from_file_name(fname, registry, requested_ext="auto"):
@@ -614,8 +605,7 @@ class FilePrefix:
     def string_io(self) -> io.StringIO:
         if self.non_utf8_error is not None:
             raise self.non_utf8_error
-        rval = io.StringIO(self.contents_header)
-        return rval
+        return io.StringIO(self.contents_header)
 
     def text_io(self, *args, **kwargs) -> io.TextIOWrapper:
         return io.TextIOWrapper(io.BytesIO(self.contents_header_bytes), *args, **kwargs)
@@ -656,9 +646,13 @@ class FilePrefix:
 
 
 def _get_file_prefix(filename_or_file_prefix: Union[str, FilePrefix], auto_decompress: bool = True) -> FilePrefix:
-    if not isinstance(filename_or_file_prefix, FilePrefix):
-        return FilePrefix(filename_or_file_prefix, auto_decompress=auto_decompress)
-    return filename_or_file_prefix
+    return (
+        filename_or_file_prefix
+        if isinstance(filename_or_file_prefix, FilePrefix)
+        else FilePrefix(
+            filename_or_file_prefix, auto_decompress=auto_decompress
+        )
+    )
 
 
 def run_sniffers_raw(file_prefix: FilePrefix, sniff_order):
@@ -680,7 +674,7 @@ def run_sniffers_raw(file_prefix: FilePrefix, sniff_order):
             continue
         if not datatype_compressed and file_prefix.compressed_format:
             continue
-        if file_prefix.binary != datatype.is_binary and not datatype.is_binary == "maybe":
+        if file_prefix.binary != datatype.is_binary != "maybe":
             # Binary detection doesn't match datatype ...
             compressed_data_for_compressed_text_datatype = (
                 file_prefix.binary and file_prefix.compressed_format and datatype_compressed and not datatype.is_binary
@@ -690,11 +684,13 @@ def run_sniffers_raw(file_prefix: FilePrefix, sniff_order):
                 continue
         try:
             if hasattr(datatype, "sniff_prefix"):
-                if file_prefix.compressed_format and getattr(datatype, "compressed_format", None):
-                    # Compare the compressed format detected
-                    # to the expected.
-                    if file_prefix.compressed_format != datatype.compressed_format:
-                        continue
+                if (
+                    file_prefix.compressed_format
+                    and getattr(datatype, "compressed_format", None)
+                    and file_prefix.compressed_format
+                    != datatype.compressed_format
+                ):
+                    continue
                 if datatype.sniff_prefix(file_prefix):
                     file_ext = datatype.file_ext
                     break
@@ -722,15 +718,16 @@ def build_sniff_from_prefix(klass):
         datatype_compressed = getattr(self, "compressed", False)
         if file_prefix.compressed_format and not datatype_compressed:
             return False
-        if datatype_compressed:
-            if not file_prefix.compressed_format:
-                # This not a compressed file we are looking but the type expects it to be
-                # must return False.
-                return False
+        if datatype_compressed and not file_prefix.compressed_format:
+            # This not a compressed file we are looking but the type expects it to be
+            # must return False.
+            return False
 
-        if hasattr(self, "compressed_format"):
-            if self.compressed_format != file_prefix.compressed_format:
-                return False
+        if (
+            hasattr(self, "compressed_format")
+            and self.compressed_format != file_prefix.compressed_format
+        ):
+            return False
         return self.sniff_prefix(file_prefix)
 
     klass.sniff = auto_sniff
@@ -783,16 +780,16 @@ def handle_compressed_file(
     filename = file_prefix.filename
     uncompressed_path = filename
     tmp_dir = tmp_dir or os.path.dirname(filename)
-    check_compressed_function = COMPRESSION_CHECK_FUNCTIONS.get(file_prefix.compressed_format)
-    if check_compressed_function:
+    if check_compressed_function := COMPRESSION_CHECK_FUNCTIONS.get(
+        file_prefix.compressed_format
+    ):
         is_compressed, is_valid = check_compressed_function(filename, check_content=check_content)
         compressed_type = file_prefix.compressed_format
     if is_compressed and is_valid:
         if ext in AUTO_DETECT_EXTENSIONS:
             # attempt to sniff for a keep-compressed datatype (observing the sniff order)
             sniff_datatypes = filter(lambda d: getattr(d, "compressed", False), datatypes_registry.sniff_order)
-            sniffed_ext = run_sniffers_raw(file_prefix, sniff_datatypes)
-            if sniffed_ext:
+            if sniffed_ext := run_sniffers_raw(file_prefix, sniff_datatypes):
                 ext = sniffed_ext
                 keep_compressed = True
         else:
@@ -812,10 +809,9 @@ def handle_compressed_file(
                 except OSError as e:
                     os.remove(uncompressed.name)
                     raise OSError(
-                        "Problem uncompressing {} data, please try retrieving the data uncompressed: {}".format(
-                            compressed_type, util.unicodify(e)
-                        )
+                        f"Problem uncompressing {compressed_type} data, please try retrieving the data uncompressed: {util.unicodify(e)}"
                     )
+
                 finally:
                     is_compressed = False
         uncompressed_path = uncompressed.name
@@ -845,12 +841,11 @@ class HandleUploadedDatasetFileInternalResponse(NamedTuple):
 def convert_function(convert_to_posix_lines, convert_spaces_to_tabs) -> ConvertFunction:
     assert convert_to_posix_lines or convert_spaces_to_tabs
     if convert_spaces_to_tabs and convert_to_posix_lines:
-        convert_fxn = convert_newlines_sep2tabs
+        return convert_newlines_sep2tabs
     elif convert_to_posix_lines:
-        convert_fxn = convert_newlines
+        return convert_newlines
     else:
-        convert_fxn = convert_sep2tabs
-    return convert_fxn
+        return convert_sep2tabs
 
 
 def handle_uploaded_dataset_file_internal(

@@ -124,7 +124,7 @@ class BaseFilesSource(FilesSource):
             "requires_groups": self.requires_groups,
         }
         if for_serialization:
-            rval.update(self._serialization_props(user_context=user_context))
+            rval |= self._serialization_props(user_context=user_context)
         return rval
 
     def to_dict_time(self, ctime):
@@ -220,12 +220,10 @@ class BaseFilesSource(FilesSource):
 def uri_join(*args):
     # url_join doesn't work with non-standard scheme
     arg0 = args[0]
-    if "://" in arg0:
-        scheme, path = arg0.split("://", 1)
-        rval = f"{scheme}://{slash_join(path, *args[1:]) if path else slash_join(*args[1:])}"
-    else:
-        rval = slash_join(*args)
-    return rval
+    if "://" not in arg0:
+        return slash_join(*args)
+    scheme, path = arg0.split("://", 1)
+    return f"{scheme}://{slash_join(path, *args[1:]) if path else slash_join(*args[1:])}"
 
 
 def slash_join(*args):

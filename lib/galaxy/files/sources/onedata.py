@@ -13,8 +13,7 @@ class OneDataFilesSource(PyFilesystem2FilesSource):
 
     def _open_fs(self, user_context):
         props = self._serialization_props(user_context)
-        handle = OnedataFS(**props)
-        return handle
+        return OnedataFS(**props)
 
 
 __all__ = ("OneDataFilesSource",)

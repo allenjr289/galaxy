@@ -15,8 +15,7 @@ class GoogleDriveFilesSource(PyFilesystem2FilesSource):
     def _open_fs(self, user_context):
         props = self._serialization_props(user_context)
         credentials = Credentials(**props)
-        handle = GoogleDriveFS(credentials)
-        return handle
+        return GoogleDriveFS(credentials)
 
 
 __all__ = ("GoogleDriveFilesSource",)

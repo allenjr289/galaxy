@@ -13,8 +13,7 @@ class S3FilesSource(PyFilesystem2FilesSource):
 
     def _open_fs(self, user_context):
         props = self._serialization_props(user_context)
-        handle = S3FS(**props)
-        return handle
+        return S3FS(**props)
 
 
 __all__ = ("S3FilesSource",)

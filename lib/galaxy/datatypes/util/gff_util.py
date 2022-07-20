@@ -148,9 +148,7 @@ class GFFFeature(GFFInterval):
         return name
 
     def copy(self):
-        intervals_copy = []
-        for interval in self.intervals:
-            intervals_copy.append(interval.copy())
+        intervals_copy = [interval.copy() for interval in self.intervals]
         return GFFFeature(
             self.reader,
             self.chrom_col,
@@ -164,10 +162,7 @@ class GFFFeature(GFFInterval):
         )
 
     def lines(self):
-        lines = []
-        for interval in self.intervals:
-            lines.append("\t".join(interval.fields))
-        return lines
+        return ["\t".join(interval.fields) for interval in self.intervals]
 
 
 class GFFIntervalToBEDReaderWrapper(NiceReaderWrapper):
@@ -240,7 +235,7 @@ class GFFReaderWrapper(NiceReaderWrapper):
         self.__end_of_intervals = False
 
     def parse_row(self, line):
-        interval = GFFInterval(
+        return GFFInterval(
             self,
             line.split("\t"),
             self.chrom_col,
@@ -252,7 +247,6 @@ class GFFReaderWrapper(NiceReaderWrapper):
             self.default_strand,
             fix_strand=self.fix_strand,
         )
-        return interval
 
     def __next__(self):
         """Returns next GFFFeature."""
@@ -263,18 +257,16 @@ class GFFReaderWrapper(NiceReaderWrapper):
 
         def handle_parse_error(e):
             """Actions to take when ParseError found."""
-            if self.outstream:
-                if self.print_delegate and callable(self.print_delegate):
-                    self.print_delegate(self.outstream, e, self)
+            if (
+                self.outstream
+                and self.print_delegate
+                and callable(self.print_delegate)
+            ):
+                self.print_delegate(self.outstream, e, self)
             self.skipped += 1
             # no reason to stuff an entire bad file into memmory
             if self.skipped < 10:
                 self.skipped_lines.append((self.linenum, self.current_line, unicodify(e)))
-
-            # For debugging, uncomment this to propogate parsing exceptions up.
-            # I.e. the underlying reason for an unexpected StopIteration exception
-            # can be found by uncommenting this.
-            # raise e
 
         #
         # Get next GFFFeature
@@ -454,7 +446,7 @@ def parse_gff_attributes(attr_str):
         value = pair[1].strip(' "')
         attributes[name] = value
 
-    if len(attributes) == 0:
+    if not attributes:
         # Could not split attributes string, so entire string must be
         # 'group' attribute. This is the case for strictly GFF files.
         attributes["group"] = attr_str
@@ -505,9 +497,7 @@ def gff_attributes_to_str(attrs, gff_format):
             attrs["transcript_id"] = attrs["gene_id"] = attrs[id_attr]
     elif gff_format == "GFF3":
         format_string = "%s=%s"
-    attrs_strs = []
-    for name, value in attrs.items():
-        attrs_strs.append(format_string % (name, value))
+    attrs_strs = [format_string % (name, value) for name, value in attrs.items()]
     return " ; ".join(attrs_strs)
 
 
@@ -570,8 +560,7 @@ def read_unordered_gtf(iterator, strict=False):
     yield from comments
 
     for chrom_features in chroms_features_sorted:
-        for feature in chrom_features:
-            yield feature
+        yield from chrom_features
 
 
 __all__ = (

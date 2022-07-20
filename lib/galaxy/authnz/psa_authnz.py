@@ -188,11 +188,12 @@ class PSAAuthnz(IdentityProvider):
 class Strategy(BaseStrategy):
     def __init__(self, request, session, storage, config, tpl=None):
         self.request = request
-        self.session = session if session else {}
+        self.session = session or {}
         self.config = config
-        self.config["SOCIAL_AUTH_REDIRECT_IS_HTTPS"] = (
-            True if self.request and self.request.host.startswith("https:") else False
+        self.config["SOCIAL_AUTH_REDIRECT_IS_HTTPS"] = bool(
+            self.request and self.request.host.startswith("https:")
         )
+
         self.config["SOCIAL_AUTH_GOOGLE_OPENIDCONNECT_EXTRA_DATA"] = ["id_token"]
         super().__init__(storage, tpl)
 
@@ -230,10 +231,11 @@ class Strategy(BaseStrategy):
             return path
         if self.request:
             return (
-                self.request.host + "/authnz" + ("/" + self.config.get("provider"))
+                f"{self.request.host}/authnz" + ("/" + self.config.get("provider"))
                 if self.config.get("provider", None) is not None
                 else ""
             )
+
         return path
 
     def redirect(self, url):
@@ -355,32 +357,27 @@ def verify(strategy=None, response=None, details=None, **kwargs):
         # is not compatible, so allow user login.
         return
 
-    if provider.lower() == "gcp":
-        result = requests.post(
-            f"https://iam.googleapis.com/v1/projects/-/serviceAccounts/{endpoint}:getIamPolicy",
-            headers={
-                "Authorization": f"Bearer {response.get('access_token')}",
-                "Accept": "application/json",
-            },
-            timeout=DEFAULT_SOCKET_TIMEOUT,
-        )
-        res = json.loads(result.content)
-        if result.status_code == requests.codes.ok:
-            email_addresses = res["bindings"][0]["members"]
-            email_addresses = [x.lower().replace("user:", "").strip() for x in email_addresses]
-            if details.get("email") in email_addresses:
-                # Secondary authorization successful, so allow user login.
-                pass
-            else:
-                raise Exception("Not authorized by GCP IAM.")
-        else:
-            # The message of the raised exception is shown to the user; hence,
-            # the following way of handling exception is better than using
-            # result.raise_for_status(), since raise_for_status may report
-            # sensitive information that should not be exposed to users.
-            raise Exception(res["error"]["message"])
-    else:
+    if provider.lower() != "gcp":
         raise Exception(f"`{provider}` is an unsupported secondary authorization provider, contact admin.")
+    result = requests.post(
+        f"https://iam.googleapis.com/v1/projects/-/serviceAccounts/{endpoint}:getIamPolicy",
+        headers={
+            "Authorization": f"Bearer {response.get('access_token')}",
+            "Accept": "application/json",
+        },
+        timeout=DEFAULT_SOCKET_TIMEOUT,
+    )
+    res = json.loads(result.content)
+    if result.status_code != requests.codes.ok:
+        # The message of the raised exception is shown to the user; hence,
+        # the following way of handling exception is better than using
+        # result.raise_for_status(), since raise_for_status may report
+        # sensitive information that should not be exposed to users.
+        raise Exception(res["error"]["message"])
+    email_addresses = res["bindings"][0]["members"]
+    email_addresses = [x.lower().replace("user:", "").strip() for x in email_addresses]
+    if details.get("email") not in email_addresses:
+        raise Exception("Not authorized by GCP IAM.")
 
 
 def allowed_to_disconnect(

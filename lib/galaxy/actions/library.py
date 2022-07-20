@@ -89,8 +89,6 @@ class LibraryActions:
     """
 
     def _upload_dataset(self, trans, folder_id: str, replace_dataset: Optional[LibraryDataset] = None, **kwd):
-        # Set up the traditional tool state/params
-        cntrller = "api"
         tool_id = "upload1"
         message = None
         file_type = kwd.get("file_type")
@@ -102,10 +100,12 @@ class LibraryActions:
         state = tool.new_state(trans)
         populate_state(trans, tool.inputs, kwd, state.inputs)
         tool_params = state.inputs
-        dataset_upload_inputs = []
-        for input in tool.inputs.values():
-            if input.type == "upload_dataset":
-                dataset_upload_inputs.append(input)
+        dataset_upload_inputs = [
+            input
+            for input in tool.inputs.values()
+            if input.type == "upload_dataset"
+        ]
+
         # Library-specific params
         server_dir = kwd.get("server_dir", "")
         upload_option = kwd.get("upload_option", "upload_file")
@@ -128,6 +128,8 @@ class LibraryActions:
         if response_code == 200:
             if upload_option == "upload_file":
                 tool_params = upload_common.persist_uploads(tool_params, trans)
+                # Set up the traditional tool state/params
+                cntrller = "api"
                 uploaded_datasets = upload_common.get_uploaded_datasets(
                     trans, cntrller, tool_params, dataset_upload_inputs, library_bunch=library_bunch
                 )
@@ -146,8 +148,10 @@ class LibraryActions:
             return (response_code, message)
         json_file_path = upload_common.create_paramfile(trans, uploaded_datasets)
         data_list = [ud.data for ud in uploaded_datasets]
-        job_params = {}
-        job_params["link_data_only"] = json.dumps(kwd.get("link_data_only", "copy_files"))
+        job_params = {
+            "link_data_only": json.dumps(kwd.get("link_data_only", "copy_files"))
+        }
+
         job_params["uuid"] = json.dumps(kwd.get("uuid", None))
         job, output = upload_common.create_job(
             trans, tool_params, tool, json_file_path, data_list, folder=library_bunch.folder, job_params=job_params
@@ -213,15 +217,17 @@ class LibraryActions:
         (files_and_folders, _response_code, _message) = self._get_path_files_and_folders(params, preserve_dirs)
         if _response_code:
             return (uploaded_datasets, _response_code, _message)
-        for (path, name, folder) in files_and_folders:
-            uploaded_datasets.append(
-                self._make_library_uploaded_dataset(trans, params, name, path, "path_paste", library_bunch, folder)
+        uploaded_datasets.extend(
+            self._make_library_uploaded_dataset(
+                trans, params, name, path, "path_paste", library_bunch, folder
             )
+            for path, name, folder in files_and_folders
+        )
+
         return uploaded_datasets, 200, None
 
     def _get_path_files_and_folders(self, params, preserve_dirs):
-        problem_response = self._check_path_paste_params(params)
-        if problem_response:
+        if problem_response := self._check_path_paste_params(params):
             return problem_response
         files_and_folders = []
         for (line, path) in self._paths_list(params):
@@ -256,11 +262,11 @@ class LibraryActions:
             message = "No paths entered in the upload form"
             response_code = 400
             return None, response_code, message
-        bad_paths = []
-        for (_, path) in self._paths_list(params):
-            if not os.path.exists(path):
-                bad_paths.append(path)
-        if bad_paths:
+        if bad_paths := [
+            path
+            for _, path in self._paths_list(params)
+            if not os.path.exists(path)
+        ]:
             message = 'Invalid paths: "%s".' % '", "'.join(bad_paths)
             response_code = 400
             return None, response_code, message
@@ -339,22 +345,20 @@ class LibraryActions:
             ):
                 message = f"You do not have permission to access the history dataset with id ({str(item.id)})."
                 raise ItemAccessibilityException(message)
-        else:
-            # Make sure the user has the LIBRARY_ACCESS permission on the library item.
-            if not item:
-                message = f"Invalid library item ({escape(str(item))}) specified."
-                raise ObjectNotFound(message)
-            elif not (
-                is_admin or trans.app.security_agent.can_access_library_item(current_user_roles, item, trans.user)
-            ):
-                if isinstance(item, trans.model.Library):
-                    item_type = "data library"
-                elif isinstance(item, trans.model.LibraryFolder):
-                    item_type = "folder"
-                else:
-                    item_type = "(unknown item type)"
-                message = f"You do not have permission to access the {escape(item_type)} with id ({str(item.id)})."
-                raise ItemAccessibilityException(message)
+        elif not item:
+            message = f"Invalid library item ({escape(str(item))}) specified."
+            raise ObjectNotFound(message)
+        elif not (
+            is_admin or trans.app.security_agent.can_access_library_item(current_user_roles, item, trans.user)
+        ):
+            if isinstance(item, trans.model.Library):
+                item_type = "data library"
+            elif isinstance(item, trans.model.LibraryFolder):
+                item_type = "folder"
+            else:
+                item_type = "(unknown item type)"
+            message = f"You do not have permission to access the {escape(item_type)} with id ({str(item.id)})."
+            raise ItemAccessibilityException(message)
 
     def _check_add(self, trans, is_admin, item, current_user_roles):
         # Deny access if the user is not an admin and does not have the LIBRARY_ADD permission.

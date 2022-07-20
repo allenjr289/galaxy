@@ -195,7 +195,7 @@ class App(NamedTuple):
 
     @property
     def sample_destination(self):
-        return self.destination + ".sample"
+        return f"{self.destination}.sample"
 
     @property
     def schema(self):
@@ -317,21 +317,18 @@ def _find_app_options(app_desc, path):
     """
     if _is_ini(path):
         p = nice_config_parser(path)
-        app_items = _find_app_options_from_config_parser(p)
+        return _find_app_options_from_config_parser(p)
     else:
         raw_config = _order_load_path(path)
-        app_items = raw_config.get(app_desc.app_name, None) or {}
-    return app_items
+        return raw_config.get(app_desc.app_name, None) or {}
 
 
 def _find_app_options_from_config_parser(p):
-    if not p.has_section("app:main"):
-        _warn(NO_APP_MAIN_MESSAGE)
-        app_items = {}
-    else:
-        app_items = dict(p.items("app:main"))
+    if p.has_section("app:main"):
+        return dict(p.items("app:main"))
 
-    return app_items
+    _warn(NO_APP_MAIN_MESSAGE)
+    return {}
 
 
 def _lint(args, app_desc):
@@ -402,8 +399,9 @@ def _run_conversion(args, app_desc):
 
         if key in OPTION_ACTIONS:
             option_action = OPTION_ACTIONS.get(key)
-            new_value = option_action.converted(args, app_desc, key, value)
-            if new_value:
+            if new_value := option_action.converted(
+                args, app_desc, key, value
+            ):
                 if isinstance(new_value, tuple):
                     key, value = new_value
                 else:
@@ -442,8 +440,7 @@ def _replace_file(args, f, app_desc, from_path, to_path):
 def _build_sample_yaml(args, app_desc):
     schema = app_desc.schema
     f = StringIO()
-    description = getattr(schema, "description", None)
-    if description:
+    if description := getattr(schema, "description", None):
         description = description.lstrip()
         as_comment = "\n".join(f"# {line}" for line in description.split("\n")) + "\n"
         f.write(as_comment)
@@ -457,10 +454,7 @@ def _build_sample_yaml(args, app_desc):
 
 
 def _write_to_file(args, f, path):
-    if hasattr(f, "getvalue"):
-        contents = f.getvalue()
-    else:
-        contents = f
+    contents = f.getvalue() if hasattr(f, "getvalue") else f
     if args.dry_run:
         contents_indented = "\n".join(f" |{line}" for line in contents.splitlines())
         print(f"Overwriting {path} with the following contents:\n{contents_indented}")
@@ -475,9 +469,7 @@ def _write_to_file(args, f, path):
 def _order_load_path(path):
     """Load (with ``_ordered_load``) on specified path (a YAML file)."""
     with open(path) as f:
-        # Allow empty mapping (not allowed by pykwalify)
-        raw_config = ordered_load(f)
-        return raw_config
+        return ordered_load(f)
 
 
 def _write_sample_section(args, f, section_header, schema, as_comment=True):
@@ -538,8 +530,7 @@ def _warn(message):
 
 def _get_option_desc(option):
     desc = option["desc"]
-    parent_dir = option.get("path_resolves_to")
-    if parent_dir:
+    if parent_dir := option.get("path_resolves_to"):
         path_resolves = f"The value of this option will be resolved with respect to <{parent_dir}>."
         return f"{desc}\n{path_resolves}" if desc else path_resolves
     return desc

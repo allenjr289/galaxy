@@ -132,7 +132,7 @@ class RegexLineDataProvider(FilteredLineDataProvider):
     def filter_by_regex(self, line):
         matches = any(regex.match(line) for regex in self.compiled_regex_list)
         if self.invert:
-            return line if not matches else None
+            return None if matches else line
         return line if matches else None
 
 
@@ -181,9 +181,7 @@ class BlockDataProvider(base.LimitedOffsetDataProvider):
         """
         Overridden to provide last block.
         """
-        parent_gen = super().__iter__()
-        yield from parent_gen
-
+        yield from super().__iter__()
         last_block = self.handle_last_block()
         if last_block is not None:
             self.num_data_returned += 1
@@ -205,14 +203,12 @@ class BlockDataProvider(base.LimitedOffsetDataProvider):
             return None
 
         block_to_return = None
-        if self.is_new_block(line):
-            # if we're already in a block, return the prev. block and add the line to a new block
-            if self.block_lines:
-                block_to_return = self.assemble_current_block()
-                block_to_return = self.filter_block(block_to_return)
-                self.num_data_read += 1
+        if self.is_new_block(line) and self.block_lines:
+            block_to_return = self.assemble_current_block()
+            block_to_return = self.filter_block(block_to_return)
+            self.num_data_read += 1
 
-                self.init_new_block()
+            self.init_new_block()
 
         self.add_line_to_block(line)
         return block_to_return
@@ -222,9 +218,7 @@ class BlockDataProvider(base.LimitedOffsetDataProvider):
         Returns True if the given line indicates the start of a new block
         (and the current block should be provided) or False if not.
         """
-        if self.new_block_delim_fn:
-            return self.new_block_delim_fn(line)
-        return True
+        return self.new_block_delim_fn(line) if self.new_block_delim_fn else True
 
     # NOTE:
     #   some formats have one block attr per line
@@ -249,7 +243,7 @@ class BlockDataProvider(base.LimitedOffsetDataProvider):
         Called per block (just before providing).
         """
         # empty block_lines and assemble block
-        return list(self.block_lines.popleft() for i in range(len(self.block_lines)))
+        return [self.block_lines.popleft() for _ in range(len(self.block_lines))]
 
     def filter_block(self, block):
         """
@@ -257,9 +251,7 @@ class BlockDataProvider(base.LimitedOffsetDataProvider):
 
         Called per block (just before providing).
         """
-        if self.block_filter_fn:
-            return self.block_filter_fn(block)
-        return block
+        return self.block_filter_fn(block) if self.block_filter_fn else block
 
     def handle_last_block(self):
         """

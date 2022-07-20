@@ -58,7 +58,7 @@ class SubprocessDataProvider(base.DataProvider):
         try:
             # how expensive is this?
             popen = subprocess.Popen(command_list, stderr=subprocess.PIPE, stdout=subprocess.PIPE)
-            log.info(f"opened subrocess ({str(command_list)}), PID: {str(popen.pid)}")
+            log.info(f"opened subrocess ({command_list}), PID: {str(popen.pid)}")
 
         except OSError as os_err:
             command_str = " ".join(self.command)

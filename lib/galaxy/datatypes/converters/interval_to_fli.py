@@ -41,10 +41,11 @@ def main():
         # GTF/GFF format
 
         # Create reader.
-        if input_format == "gff":
-            in_reader = GFFReaderWrapper(open(in_fname))
-        else:  # input_format == 'gtf'
-            in_reader = read_unordered_gtf(open(in_fname))
+        in_reader = (
+            GFFReaderWrapper(open(in_fname))
+            if input_format == "gff"
+            else read_unordered_gtf(open(in_fname))
+        )
 
         for feature in in_reader:
             if isinstance(feature, (Header, Comment)):
@@ -78,18 +79,17 @@ def main():
             fields = line.split()
 
             # Ignore lines with no feature name.
-            if len(fields) < 4:
-                continue
-
-            # Process line
-            name_loc_dict[fields[3]] = {"contig": fields[0], "start": int(fields[1]), "end": int(fields[2])}
+            if len(fields) >= 4:
+                # Process line
+                name_loc_dict[fields[3]] = {"contig": fields[0], "start": int(fields[1]), "end": int(fields[2])}
 
     # Create sorted list of entries.
     max_len = 0
     entries = []
     for name in sorted(name_loc_dict.keys()):
         loc = name_loc_dict[name]
-        entry = "{}\t{}\t{}".format(name.lower(), name, "%s:%i-%i" % (loc["contig"], loc["start"], loc["end"]))
+        entry = f'{name.lower()}\t{name}\t{"%s:%i-%i" % (loc["contig"], loc["start"], loc["end"])}'
+
         if len(entry) > max_len:
             max_len = len(entry)
         entries.append(entry)

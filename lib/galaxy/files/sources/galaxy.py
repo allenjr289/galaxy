@@ -7,14 +7,17 @@ class UserFtpFilesSource(PosixFilesSource):
     plugin_type = "gxftp"
 
     def __init__(self, label="FTP Directory", doc="Galaxy User's FTP Directory", root="${user.ftp_dir}", **kwd):
-        posix_kwds = dict(
-            id="_ftp",
-            root=root,
-            label=label,
-            doc=doc,
-            writable=True,
+        posix_kwds = (
+            dict(
+                id="_ftp",
+                root=root,
+                label=label,
+                doc=doc,
+                writable=True,
+            )
+            | kwd
         )
-        posix_kwds.update(kwd)
+
         if "delete_on_realize" not in posix_kwds:
             file_sources_config = kwd["file_sources_config"]
             posix_kwds["delete_on_realize"] = file_sources_config.ftp_upload_purge
@@ -37,13 +40,16 @@ class LibraryImportFilesSource(PosixFilesSource):
         root="${config.library_import_dir}",
         **kwd,
     ):
-        posix_kwds = dict(
-            id="_import",
-            root=root,
-            label=label,
-            doc=doc,
+        posix_kwds = (
+            dict(
+                id="_import",
+                root=root,
+                label=label,
+                doc=doc,
+            )
+            | kwd
         )
-        posix_kwds.update(kwd)
+
         super().__init__(**posix_kwds)
 
     def get_prefix(self):
@@ -63,13 +69,16 @@ class UserLibraryImportFilesSource(PosixFilesSource):
         root="${config.user_library_import_dir}/${user.email}",
         **kwd,
     ):
-        posix_kwds = dict(
-            id="_userimport",
-            root=root,
-            label=label,
-            doc=doc,
+        posix_kwds = (
+            dict(
+                id="_userimport",
+                root=root,
+                label=label,
+                doc=doc,
+            )
+            | kwd
         )
-        posix_kwds.update(kwd)
+
         super().__init__(**posix_kwds)
 
     def get_prefix(self):
