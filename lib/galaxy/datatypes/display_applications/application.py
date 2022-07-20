@@ -65,13 +65,11 @@ class DisplayApplicationLink:
         )
 
     def get_inital_values(self, data, trans):
-        if self.other_values:
-            rval = dict(self.other_values)
-        else:
-            rval = {}
-        rval.update(
-            {"BASE_URL": trans.request.base, "APP": trans.app}
-        )  # trans automatically appears as a response, need to add properties of trans that we want here
+        rval = (dict(self.other_values) if self.other_values else {}) | {
+            "BASE_URL": trans.request.base,
+            "APP": trans.app,
+        }
+
         BASE_PARAMS = {"qp": quote_plus_string, "url_for": trans.app.url_for}
         for key, value in BASE_PARAMS.items():  # add helper functions/variables
             rval[key] = value
@@ -104,10 +102,11 @@ class DisplayApplicationLink:
 
     def filter_by_dataset(self, data, trans):
         context = self.get_inital_values(data, trans)
-        for filter_elem in self.filters:
-            if fill_template(filter_elem.text, context=context) != filter_elem.get("value", "True"):
-                return False
-        return True
+        return all(
+            fill_template(filter_elem.text, context=context)
+            == filter_elem.get("value", "True")
+            for filter_elem in self.filters
+        )
 
 
 class DynamicDisplayApplicationBuilder:
@@ -119,8 +118,7 @@ class DynamicDisplayApplicationBuilder:
         else:
             filename = elem.get("from_file", None)
         if filename is None:
-            data_table_name = elem.get("from_data_table", None)
-            if data_table_name:
+            if data_table_name := elem.get("from_data_table", None):
                 data_table = display_application.app.tool_data_tables.get(data_table_name, None)
                 assert data_table is not None, f'Unable to find data table named "{data_table_name}".'
 
@@ -176,13 +174,12 @@ class DynamicDisplayApplicationBuilder:
         links = []
         for line in data_iter:
             if isinstance(line, str):
-                if not skip_startswith or not line.startswith(skip_startswith):
-                    line = line.rstrip("\n\r")
-                    if not line:
-                        continue
-                    fields = line.split(separator)
-                else:
+                if skip_startswith and line.startswith(skip_startswith):
                     continue
+                line = line.rstrip("\n\r")
+                if not line:
+                    continue
+                fields = line.split(separator)
             else:
                 fields = line
             if len(fields) > max_col:
@@ -229,9 +226,13 @@ class PopulatedDisplayApplicationLink:
         return value
 
     def preparing_display(self):
-        if not self.ready:
-            return self.link.parameters[list(self.parameters.keys())[-1]].is_preparing(self.parameters)
-        return False
+        return (
+            False
+            if self.ready
+            else self.link.parameters[
+                list(self.parameters.keys())[-1]
+            ].is_preparing(self.parameters)
+        )
 
     def prepare_display(self):
         rval = []
@@ -309,8 +310,7 @@ class DisplayApplication:
 
     def _load_links_from_elem(self, elem):
         for link_elem in elem.findall("link"):
-            link = DisplayApplicationLink.from_elem(link_elem, self)
-            if link:
+            if link := DisplayApplicationLink.from_elem(link_elem, self):
                 self.links[link.id] = link
         try:
             for dynamic_links in elem.findall("dynamic_links"):

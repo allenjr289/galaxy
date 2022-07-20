@@ -78,10 +78,10 @@ class _Isa(data.Data):
     ################################################################
 
     def _get_isa_folder_path(self, dataset):
-        isa_folder = dataset.extra_files_path
-        if not isa_folder:
+        if isa_folder := dataset.extra_files_path:
+            return isa_folder
+        else:
             raise Exception("Unvalid dataset object, or no extra files path found for this dataset.")
-        return isa_folder
 
     # Get main file {{{2
     ################################################################
@@ -115,12 +115,12 @@ class _Isa(data.Data):
         """Create a contained instance specific to the exact ISA type (Tab or Json).
         We will use it to parse and access information from the archive."""
 
-        investigation = None
         main_file = self._get_main_file(dataset)
-        if main_file is not None:
-            investigation = self._make_investigation_instance(main_file)
-
-        return investigation
+        return (
+            self._make_investigation_instance(main_file)
+            if main_file is not None
+            else None
+        )
 
     # Find main file in archive {{{2
     ################################################################
@@ -131,8 +131,7 @@ class _Isa(data.Data):
         found_file = None
 
         for f in files_list:
-            match = self._main_file_regex.match(f)
-            if match:
+            if match := self._main_file_regex.match(f):
                 if found_file is None:
                     found_file = match.group()
                 else:
@@ -182,10 +181,8 @@ class _Isa(data.Data):
                 dataset.set_peek()
             json_data = json.loads(dataset.peek)
             for line in json_data["data"]:
-                line = line.strip()
-                if not line:
-                    continue
-                out.append(f"<tr><td>{escape(util.unicodify(line, 'utf-8'))}</td></tr>")
+                if line := line.strip():
+                    out.append(f"<tr><td>{escape(util.unicodify(line, 'utf-8'))}</td></tr>")
             out.append("</table>")
             out = "".join(out)
         except Exception as exc:
@@ -199,17 +196,20 @@ class _Isa(data.Data):
         """Generate the primary file. It is an HTML file containing description of the composite dataset
         as well as a list of the composite files that it contains."""
 
-        if dataset:
-            rval = ["<html><head><title>ISA Dataset </title></head><p/>"]
-            if hasattr(dataset, "extra_files_path"):
-                rval.append("<div>ISA Dataset composed of the following files:<p/><ul>")
-                for cmp_file in os.listdir(dataset.extra_files_path):
-                    rval.append(f'<li><a href="{cmp_file}" type="text/plain">{escape(cmp_file)}</a></li>')
-                rval.append("</ul></div></html>")
-            else:
-                rval.append("<div>ISA Dataset is empty!<p/><ul>")
-            return "\n".join(rval)
-        return "<div>No dataset available</div>"
+        if not dataset:
+            return "<div>No dataset available</div>"
+        rval = ["<html><head><title>ISA Dataset </title></head><p/>"]
+        if hasattr(dataset, "extra_files_path"):
+            rval.append("<div>ISA Dataset composed of the following files:<p/><ul>")
+            rval.extend(
+                f'<li><a href="{cmp_file}" type="text/plain">{escape(cmp_file)}</a></li>'
+                for cmp_file in os.listdir(dataset.extra_files_path)
+            )
+
+            rval.append("</ul></div></html>")
+        else:
+            rval.append("<div>ISA Dataset is empty!<p/><ul>")
+        return "\n".join(rval)
 
     # Dataset content needs grooming {{{2
     ################################################################
@@ -336,9 +336,7 @@ class IsaTab(_Isa):
             for assay in study.assays:
                 a_parser = isatab_meta.LazyAssayTableParser(parser.isa)
                 a_parser.parse(os.path.join(isa_dir, assay.filename))
-        isa = parser.isa
-
-        return isa
+        return parser.isa
 
 
 # ISA-JSON class {{{1

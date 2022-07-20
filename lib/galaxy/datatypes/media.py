@@ -150,8 +150,7 @@ class Video(Binary):
                 h = stream["height"]
                 dividend, divisor = stream["avg_frame_rate"].split("/")
                 fps = float(dividend) / float(divisor)
-        else:
-            w = h = fps = 0
+        w = h = fps = 0
         return w, h, fps
 
     def set_meta(self, dataset, **kwd):

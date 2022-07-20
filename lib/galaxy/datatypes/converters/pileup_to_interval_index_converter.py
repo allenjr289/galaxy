@@ -23,7 +23,7 @@ def main():
     offset = 0
     with open(input_fname) as in_fh:
         for line in in_fh:
-            chrom, start = line.split()[0:2]
+            chrom, start = line.split()[:2]
             # Pileup format is 1-based.
             start = int(start) - 1
             index.add(chrom, start, start + 1, offset)

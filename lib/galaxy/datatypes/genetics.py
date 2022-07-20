@@ -67,7 +67,7 @@ class GenomeGraphs(Tabular):
         dataset.metadata.markerCol = 1
         header = open(dataset.file_name).readlines()[0].strip().split("\t")
         dataset.metadata.columns = len(header)
-        t = ["numeric" for x in header]
+        t = ["numeric" for _ in header]
         t[0] = "string"
         dataset.metadata.column_types = t
         return True
@@ -116,13 +116,13 @@ class GenomeGraphs(Tabular):
                     # redirect_url = quote_plus( "%sdb=%s&position=%s:%s-%s&hgt.customText=%%s" % (site_url, dataset.dbkey, chrom, start, stop) )
                     sl = [
                         f"{site_url}db={dataset.dbkey}",
+                        f"&hgGenome_dataSetName={dataset.name}&hgGenome_dataSetDescription=GalaxyGG_data",
+                        "&hgGenome_formatType=best guess&hgGenome_markerType=best guess",
+                        "&hgGenome_columnLabels=first row&hgGenome_maxVal=&hgGenome_labelVals=",
+                        "&hgGenome_doSubmitUpload=submit",
+                        f"&hgGenome_maxGapToFill=25000000&hgGenome_uploadFile={display_url}",
                     ]
-                    # sl.append("&hgt.customText=%s")
-                    sl.append(f"&hgGenome_dataSetName={dataset.name}&hgGenome_dataSetDescription=GalaxyGG_data")
-                    sl.append("&hgGenome_formatType=best guess&hgGenome_markerType=best guess")
-                    sl.append("&hgGenome_columnLabels=first row&hgGenome_maxVal=&hgGenome_labelVals=")
-                    sl.append("&hgGenome_doSubmitUpload=submit")
-                    sl.append(f"&hgGenome_maxGapToFill=25000000&hgGenome_uploadFile={display_url}")
+
                     s = "".join(sl)
                     s = quote_plus(s)
                     redirect_url = s
@@ -190,7 +190,7 @@ class GenomeGraphs(Tabular):
         buf = file_prefix.contents_header
         rows = [line.split() for line in buf.splitlines()[1:4]]  # break on lines and drop header, small sample
 
-        if len(rows) < 1:
+        if not rows:
             return False
 
         for row in rows:
@@ -293,8 +293,11 @@ class Rgenetics(Html):
     file_ext = "rgenetics"
 
     def generate_primary_file(self, dataset=None):
-        rval = ["<html><head><title>Rgenetics Galaxy Composite Dataset </title></head><p/>"]
-        rval.append("<div>This composite dataset is composed of the following files:<p/><ul>")
+        rval = [
+            "<html><head><title>Rgenetics Galaxy Composite Dataset </title></head><p/>",
+            "<div>This composite dataset is composed of the following files:<p/><ul>",
+        ]
+
         for composite_name, composite_file in self.get_composite_files(dataset=dataset).items():
             fn = composite_name
             opt_text = ""
@@ -385,10 +388,7 @@ class SNPMatrix(Rgenetics):
         with open(filename, "b") as infile:
             head = infile.read(16)
         head = [hex(x) for x in head]
-        if head != "":
-            return False
-        else:
-            return True
+        return head == ""
 
 
 class Lped(Rgenetics):
@@ -582,9 +582,12 @@ class IdeasPre(Html):
         self.regenerate_primary_file(dataset)
 
     def generate_primary_file(self, dataset=None):
-        rval = ["<html><head></head><body>"]
-        rval.append("<h3>Files prepared for IDEAS</h3>")
-        rval.append("<ul>")
+        rval = [
+            "<html><head></head><body>",
+            "<h3>Files prepared for IDEAS</h3>",
+            "<ul>",
+        ]
+
         for composite_name in self.get_composite_files(dataset=dataset).keys():
             fn = composite_name
             rval.append(f'<li><a href="{fn}>{fn}</a></li>')
@@ -593,9 +596,12 @@ class IdeasPre(Html):
 
     def regenerate_primary_file(self, dataset):
         # Cannot do this until we are setting metadata.
-        rval = ["<html><head></head><body>"]
-        rval.append("<h3>Files prepared for IDEAS</h3>")
-        rval.append("<ul>")
+        rval = [
+            "<html><head></head><body>",
+            "<h3>Files prepared for IDEAS</h3>",
+            "<ul>",
+        ]
+
         for fname in os.listdir(dataset.extra_files_path):
             fn = os.path.split(fname)[-1]
             rval.append(f'<li><a href="{fn}">{fn}</a></li>')
@@ -677,7 +683,7 @@ class RexpBase(Html):
             if nrows == 0:  # set up from header
                 head = row
                 totcols = len(row)
-                concordance = [{} for x in head]  # list of dicts
+                concordance = [{} for _ in head]
             else:
                 for col, code in enumerate(row):  # keep column order correct
                     if col >= totcols:
@@ -690,8 +696,7 @@ class RexpBase(Html):
                         concordance[col][code] += 1
         useCols = []
         useConc = []  # columns of interest to keep
-        nrows = len(phenolist)
-        nrows -= 1  # drop head from count
+        nrows = len(phenolist) - 1
         for c, conc in enumerate(concordance):  # c is column number
             if (len(conc) > 1) and (len(conc) < min(nrows, maxConc)):  # not all same and not all different!!
                 useConc.append(conc)  # keep concordance
@@ -702,7 +707,7 @@ class RexpBase(Html):
         p = phenolist[1:]  # drop header
         plist = [x.strip().split("\t") for x in p]  # list of lists
         phe = [[x[i] for i in useCols] for x in plist if len(x) >= totcols]  # strip unused data
-        for i in range(0, (nuse - 1)):  # for each interesting column
+        for i in range(nuse - 1):  # for each interesting column
             for j in range(i + 1, nuse):
                 kdict = {}
                 for row in phe:  # row is a list of lists
@@ -710,9 +715,8 @@ class RexpBase(Html):
                     kdict[k] = k
                 if len(kdict.keys()) == len(concordance[useCols[j]]):  # i and j are always matched
                     delme.append(j)
-        delme = list(set(delme))  # remove dupes
         listCol = []
-        delme.sort()
+        delme = sorted(set(delme))
         delme.reverse()  # must delete from far end!
         for i in delme:
             del useConc[i]  # get rid of concordance
@@ -722,19 +726,14 @@ class RexpBase(Html):
             cc = [(x[1], x[0]) for x in ccounts]  # list of code count tuples
             codeDetails = (head[useCols[i]], cc)  # ('foo',[('a',3),('b',11),..])
             listCol.append(codeDetails)
-        if len(listCol) > 0:
-            res = listCol
-            # metadata.pheCols becomes [('bar;22,zot;113','foo'), ...]
-        else:
-            res = [
-                (
-                    "no usable phenotype columns found",
-                    [
-                        ("?", 0),
-                    ],
-                ),
-            ]
-        return res
+        return listCol or [
+            (
+                "no usable phenotype columns found",
+                [
+                    ("?", 0),
+                ],
+            ),
+        ]
 
     def get_pheno(self, dataset):
         """
@@ -887,12 +886,10 @@ class RexpBase(Html):
                 lrow = row.strip().split("\t")
                 if i == 0:
                     orow = [f"<th>{escape(x)}</th>" for x in lrow]
-                    orow.insert(0, "<tr>")
-                    orow.append("</tr>")
                 else:
                     orow = [f"<td>{escape(x)}</td>" for x in lrow]
-                    orow.insert(0, "<tr>")
-                    orow.append("</tr>")
+                orow.insert(0, "<tr>")
+                orow.append("</tr>")
                 out.append("".join(orow))
             out.append("</table>")
             out = "\n".join(out)
@@ -904,8 +901,7 @@ class RexpBase(Html):
         """
         Returns formatted html of peek
         """
-        out = self.make_html_table(dataset.peek)
-        return out
+        return self.make_html_table(dataset.peek)
 
 
 class Affybatch(RexpBase):
@@ -1057,10 +1053,7 @@ class MarkerMap(LinkageStudies):
     def header_check(self, fio):
         headers = fio.readline().split()
 
-        if len(headers) == 5 and headers[0] == "#Chr":
-            return True
-
-        return False
+        return len(headers) == 5 and headers[0] == "#Chr"
 
     def sniff_prefix(self, file_prefix: FilePrefix):
         """
@@ -1098,7 +1091,7 @@ class MarkerMap(LinkageStudies):
                 try:
                     int(chrm)
                 except ValueError:
-                    if not chrm.lower()[0] in ("x", "y", "m"):
+                    if chrm.lower()[0] not in ("x", "y", "m"):
                         return False
 
             except ValueError:
@@ -1189,10 +1182,7 @@ class AllegroLOD(LinkageStudies):
 
     def header_check(self, fio):
         header = fio.readline().splitlines()[0].split()
-        if len(header) == 4 and header == ["family", "location", "LOD", "marker"]:
-            return True
-
-        return False
+        return len(header) == 4 and header == ["family", "location", "LOD", "marker"]
 
     def sniff_prefix(self, file_prefix: FilePrefix):
         """

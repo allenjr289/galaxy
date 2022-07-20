@@ -110,12 +110,7 @@ class Phylip(Text):
                 # Could tighten up further by requiring IUPAC strings chars
                 return False
         line = alignment_prefix.readline()
-        if line.strip():
-            # There should be a newline separating alignments.
-            # If we got more content this is probably not a phylip file
-            return False
-        # There may be more lines with the remaining parts of the sequences
-        return True
+        return not line.strip()
 
     def sniff_prefix(self, file_prefix: FilePrefix):
         """

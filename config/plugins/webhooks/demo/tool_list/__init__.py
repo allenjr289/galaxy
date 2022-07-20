@@ -2,8 +2,7 @@ import yaml
 
 
 def main(trans, webhook, params):
-    data = {}
-    data["tools"] = []
+    data = {"tools": []}
     unique_tools = []
 
     tools = trans.app.toolbox.tools()

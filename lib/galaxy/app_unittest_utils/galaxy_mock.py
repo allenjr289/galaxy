@@ -257,10 +257,7 @@ class MockTrans:
         pass
 
     def get_user(self):
-        if self.galaxy_session:
-            return self.galaxy_session.user
-        else:
-            return self.__user
+        return self.galaxy_session.user if self.galaxy_session else self.__user
 
     def set_user(self, user):
         """Set the current user."""
@@ -320,8 +317,8 @@ class MockDir:
 
 
 class MockTemplateHelpers:
-    def js(*js_files):
+    def js(self):
         pass
 
-    def css(*css_files):
+    def css(self):
         pass

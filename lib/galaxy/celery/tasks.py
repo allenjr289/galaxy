@@ -59,8 +59,7 @@ def cached_create_tool_from_representation(app, raw_tool_source):
 @galaxy_task(ignore_result=True, action="recalculate a user's disk usage")
 def recalculate_user_disk_usage(session: galaxy_scoped_session, user_id=None):
     if user_id:
-        user = session.query(model.User).get(user_id)
-        if user:
+        if user := session.query(model.User).get(user_id):
             user.calculate_and_set_disk_usage()
             log.info(f"New user disk usage is {user.disk_usage}")
         else:

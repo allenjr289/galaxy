@@ -57,22 +57,29 @@ if __name__ == "__main__":
     if len(sys.argv) > 2:
         try:
             buildfile = fileinput.FileInput(sys.argv[2])
-            for line in buildfile:
-                if line.startswith("#"):
-                    continue
-                builds.append(line.split("\t")[0])
+            builds.extend(
+                line.split("\t")[0]
+                for line in buildfile
+                if not line.startswith("#")
+            )
+
         except Exception:
             sys.exit("Bad input file.")
     else:
         try:
-            for build in parse_builds.getbuilds("http://genome.cse.ucsc.edu/cgi-bin/das/dsn"):
-                builds.append(build[0])
+            builds.extend(
+                build[0]
+                for build in parse_builds.getbuilds(
+                    "http://genome.cse.ucsc.edu/cgi-bin/das/dsn"
+                )
+            )
+
         except Exception:
             sys.exit("Unable to retrieve builds.")
     for build in builds:
         if build == "?":
             continue  # no lengths for unspecified chrom
-        print("Retrieving " + build)
+        print(f"Retrieving {build}")
         outfile_name = dbpath + build + ".len"
         try:
             with open(outfile_name, "w") as outfile:

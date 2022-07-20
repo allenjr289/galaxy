@@ -44,10 +44,7 @@ class Tag:
         assert line.startswith("$tag:")
         line_parts = line.split(" ")
         first_part = line_parts[0]
-        hide_attributes = False
-        if len(line_parts) > 1:
-            if "hide_attributes" in line_parts[1]:
-                hide_attributes = True
+        hide_attributes = len(line_parts) > 1 and "hide_attributes" in line_parts[1]
         _, title, xpath = first_part.split(":")
         xpath = xpath.replace("/element", "/{http://www.w3.org/2001/XMLSchema}element")
         xpath = xpath.replace("/group", "/{http://www.w3.org/2001/XMLSchema}group")
@@ -61,11 +58,11 @@ class Tag:
         anchor = self.title
         for _ in ["|", "_"]:
             anchor = anchor.replace(_, "-")
-        return "#" + anchor
+        return f"#{anchor}"
 
     @property
     def _pretty_title(self):
-        return " > ".join("``%s``" % p for p in self.title.split("|"))
+        return " > ".join(f"``{p}``" for p in self.title.split("|"))
 
     def build_toc_entry(self):
         return f"* [{self._pretty_title}]({self._anchor})"
@@ -73,10 +70,10 @@ class Tag:
     def build_help(self):
         tag = xmlschema_doc.find(self.xpath)
         if tag is None:
-            raise Exception("Could not find xpath for %s" % self.xpath)
+            raise Exception(f"Could not find xpath for {self.xpath}")
 
         tag_help = StringIO()
-        tag_help.write("## " + self._pretty_title)
+        tag_help.write(f"## {self._pretty_title}")
         tag_help.write("\n\n")
         tag_help.write(_build_tag(tag, self.hide_attributes))
         tag_help.write("\n\n")
@@ -114,7 +111,7 @@ def _build_tag(tag, hide_attributes):
                     doc = _doc_or_none(element)
                     if doc is None:
                         doc = _doc_or_none(_type_el(element))
-                    assert doc is not None, "Documentation for %s is empty" % element.attrib["name"]
+                    assert doc is not None, f'Documentation for {element.attrib["name"]} is empty'
                     doc = doc.strip()
 
                     element_el = _find_tag_el(element)
@@ -123,8 +120,7 @@ def _build_tag(tag, hide_attributes):
                     assertions_buffer.write(f"#### ``{element.attrib['name']}``:\n\n{doc}\n\n")
             text = text.replace(line, assertions_buffer.getvalue())
     tag_help.write(text)
-    best_practices = _get_bp_link(annotation_el)
-    if best_practices:
+    if best_practices := _get_bp_link(annotation_el):
         tag_help.write("\n\n### Best Practices\n")
         tag_help.write(
             """
@@ -142,10 +138,7 @@ def _replace_attribute_list(tag, text, attributes):
         if not line.startswith("$attribute_list:"):
             continue
         attributes_str, header_level = line.split(":")[1:3]
-        if attributes_str == "":
-            attribute_names = None
-        else:
-            attribute_names = attributes_str.split(",")
+        attribute_names = None if attributes_str == "" else attributes_str.split(",")
         header_level = int(header_level)
         text = text.replace(
             line, _build_attributes_table(tag, attributes, attribute_names=attribute_names, header_level=header_level)
@@ -154,11 +147,15 @@ def _replace_attribute_list(tag, text, attributes):
 
 
 def _get_bp_link(annotation_el):
-    anchor = annotation_el.attrib.get("{http://galaxyproject.org/xml/1.0}best_practices", None)
-    link = None
-    if anchor:
-        link = "https://planemo.readthedocs.io/en/latest/standards/docs/best_practices/tool_xml.html#%s" % anchor
-    return link
+    return (
+        f"https://planemo.readthedocs.io/en/latest/standards/docs/best_practices/tool_xml.html#{anchor}"
+        if (
+            anchor := annotation_el.attrib.get(
+                "{http://galaxyproject.org/xml/1.0}best_practices", None
+            )
+        )
+        else None
+    )
 
 
 def _build_attributes_table(tag, attributes, hide_attributes=False, attribute_names=None, header_level=3):
@@ -176,7 +173,7 @@ def _build_attributes_table(tag, attributes, hide_attributes=False, attribute_na
             details = _doc_or_none(attribute)
             if details is None:
                 type_el = _type_el(attribute)
-                assert type_el is not None, "No details or type found for %s" % name
+                assert type_el is not None, f"No details or type found for {name}"
                 details = _doc_or_none(type_el)
                 annotation_el = type_el.find("{http://www.w3.org/2001/XMLSchema}annotation")
             else:
@@ -184,12 +181,9 @@ def _build_attributes_table(tag, attributes, hide_attributes=False, attribute_na
 
             use = attribute.attrib.get("use", "optional") == "required"
             details = details.replace("\n", " ").strip()
-            best_practices = _get_bp_link(annotation_el)
-            if best_practices:
-                details += (
-                    """ Find the Intergalactic Utilities Commision suggested best practices for this element [here](%s)."""
-                    % best_practices
-                )
+            if best_practices := _get_bp_link(annotation_el):
+                details += f""" Find the Intergalactic Utilities Commision suggested best practices for this element [here]({best_practices})."""
+
 
             attribute_table.write(f"``{name}`` | {details} | {use}\n")
     return attribute_table.getvalue()
@@ -227,10 +221,7 @@ def _find_attributes(tag):
 
 
 def _find_tag_el(tag):
-    if _doc_or_none(tag) is not None:
-        return tag
-
-    return _type_el(tag)
+    return tag if _doc_or_none(tag) is not None else _type_el(tag)
 
 
 def _type_el(tag):
@@ -243,10 +234,7 @@ def _type_el(tag):
 
 def _doc_or_none(tag):
     doc_el = tag.find("{http://www.w3.org/2001/XMLSchema}annotation/{http://www.w3.org/2001/XMLSchema}documentation")
-    if doc_el is None:
-        return None
-    else:
-        return doc_el.text
+    return None if doc_el is None else doc_el.text
 
 
 if __name__ == "__main__":

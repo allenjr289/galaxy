@@ -138,7 +138,7 @@ class PlantTribesKsComponents(Tabular):
                     significant_components.append(int(items[2]))
                 except Exception:
                     continue
-        if len(significant_components) > 0:
+        if significant_components:
             dataset.metadata.number_comp = max(significant_components)
 
     def set_peek(self, dataset):

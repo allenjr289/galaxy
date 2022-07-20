@@ -124,9 +124,6 @@ def validate_non_local(uri: str, ip_allowlist: List[IpAllowedListEntryT]) -> str
                 # fails because we desire to fail closed rather than open.
                 port = int(parsed_url[idx + 1 :])
                 parsed_url = parsed_url[:idx]
-            else:
-                # Plain ipv6 without port
-                pass
         else:
             # This should finally be ipv4 with port. It cannot be IPv6 as that
             # was caught by earlier cases, and it cannot be due to credentials.
@@ -161,13 +158,7 @@ def validate_non_local(uri: str, ip_allowlist: List[IpAllowedListEntryT]) -> str
                 else:
                     results.append(ip == allowlisted)
 
-            if any(results):
-                # If we had any True, then THIS (and ONLY THIS) IP address that
-                # that specific DNS entry resolved to is in allowlisted and
-                # safe to access. But we cannot exit here, we must ensure that
-                # all IPs that that DNS entry resolves to are likewise safe.
-                pass
-            else:
+            if not any(results):
                 # Otherwise, we deny access.
                 raise ConfigDoesNotAllowException("Access to this address in not permitted by server configuration")
     return url

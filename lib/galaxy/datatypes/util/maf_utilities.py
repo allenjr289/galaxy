@@ -28,10 +28,7 @@ SRC_SPLIT_CHAR = "."
 def src_split(src):
     fields = src.split(SRC_SPLIT_CHAR, 1)
     spec = fields.pop(0)
-    if fields:
-        chrom = fields.pop(0)
-    else:
-        chrom = spec
+    chrom = fields.pop(0) if fields else spec
     return spec, chrom
 
 
@@ -81,7 +78,7 @@ class TempFileHandler:
                 index = len(self.files)
                 temp_kwds = dict(self.kwds)
                 temp_kwds["delete"] = False
-                temp_kwds.update(kwds)
+                temp_kwds |= kwds
                 # Being able to use delete=True here, would simplify a bit,
                 # but we support python2.4 in these tools
                 while True:
@@ -90,11 +87,10 @@ class TempFileHandler:
                         filename = tmp_file.name
                         break
                     except OSError as e:
-                        if self.open_file_indexes and e.errno == EMFILE:
-                            self.max_open_files = len(self.open_file_indexes)
-                            self.close(self.open_file_indexes[0])
-                        else:
+                        if not self.open_file_indexes or e.errno != EMFILE:
                             raise e
+                        self.max_open_files = len(self.open_file_indexes)
+                        self.close(self.open_file_indexes[0])
                 tmp_file.close()
                 self.files.append(open(filename, "r+"))
             else:
@@ -103,11 +99,10 @@ class TempFileHandler:
                         self.files[index] = open(self.files[index].name, "r+")
                         break
                     except OSError as e:
-                        if self.open_file_indexes and e.errno == EMFILE:
-                            self.max_open_files = len(self.open_file_indexes)
-                            self.close(self.open_file_indexes[0])
-                        else:
+                        if not self.open_file_indexes or e.errno != EMFILE:
                             raise e
+                        self.max_open_files = len(self.open_file_indexes)
+                        self.close(self.open_file_indexes[0])
                 self.files[index].seek(0, 2)
         self.open_file_indexes.append(index)
         return index, self.files[index]
@@ -184,7 +179,7 @@ class RegionAlignment:
 
     # returns the reverse complement of the sequence for a species
     def get_sequence_reverse_complement(self, species):
-        complement = [base for base in self.get_sequence(species).translate(self.DNA_COMPLEMENT)]
+        complement = list(self.get_sequence(species).translate(self.DNA_COMPLEMENT))
         complement.reverse()
         return "".join(complement)
 
@@ -240,10 +235,15 @@ class SplicedAlignment:
         if not temp_file_handler:
             temp_file_handler = TempFileHandler()
         self.temp_file_handler = temp_file_handler
-        for i in range(len(exon_starts)):
-            self.exons.append(
-                GenomicRegionAlignment(exon_starts[i], exon_ends[i], species, temp_file_handler=temp_file_handler)
+        self.exons.extend(
+            GenomicRegionAlignment(
+                exon_starts[i],
+                exon_ends[i],
+                species,
+                temp_file_handler=temp_file_handler,
             )
+            for i in range(len(exon_starts))
+        )
 
     # returns the names for species found in alignment, skipping names as requested
     def get_species_names(self, skip=None):
@@ -276,7 +276,7 @@ class SplicedAlignment:
 
     # returns the reverse complement of the sequence for a species
     def get_sequence_reverse_complement(self, species):
-        complement = [base for base in self.get_sequence(species).translate(self.DNA_COMPLEMENT)]
+        complement = list(self.get_sequence(species).translate(self.DNA_COMPLEMENT))
         complement.reverse()
         return "".join(complement)
 
@@ -295,7 +295,7 @@ def maf_index_by_uid(maf_uid, index_location_file):
     for line in open(index_location_file):
         try:
             # read each line, if not enough fields, go to next line
-            if line[0:1] == "#":
+            if line[:1] == "#":
                 continue
             fields = line.split("\t")
             if maf_uid == fields[1]:
@@ -377,9 +377,7 @@ def component_overlaps_region(c, region):
     if c is None:
         return False
     start, end = c.get_forward_strand_start(), c.get_forward_strand_end()
-    if region.start >= end or region.end <= start:
-        return False
-    return True
+    return region.start < end and region.end > start
 
 
 def chop_block_by_region(block, src, region, species=None, mincols=0):
@@ -392,24 +390,23 @@ def chop_block_by_region(block, src, region, species=None, mincols=0):
     old_score = block.score  # save old score for later use
     # We no longer assume only one occurance of src per block, so we need to check them all
     for c in iter_components_by_src(block, src):
-        if component_overlaps_region(c, region):
-            if c.text is not None:
-                rev_strand = False
-                if c.strand == "-":
-                    # We want our coord_to_col coordinates to be returned from positive stranded component
-                    rev_strand = True
-                    c = c.reverse_complement()
-                start = max(region.start, c.start)
-                end = min(region.end, c.end)
-                start = c.coord_to_col(start)
-                end = c.coord_to_col(end)
-                if rev_strand:
-                    # need to orient slice coordinates to the original block direction
-                    slice_len = end - start
-                    end = len(c.text) - start
-                    start = end - slice_len
-                slice_start = min(start, slice_start)
-                slice_end = max(end, slice_end)
+        if component_overlaps_region(c, region) and c.text is not None:
+            rev_strand = False
+            if c.strand == "-":
+                # We want our coord_to_col coordinates to be returned from positive stranded component
+                rev_strand = True
+                c = c.reverse_complement()
+            start = max(region.start, c.start)
+            end = min(region.end, c.end)
+            start = c.coord_to_col(start)
+            end = c.coord_to_col(end)
+            if rev_strand:
+                # need to orient slice coordinates to the original block direction
+                slice_len = end - start
+                end = len(c.text) - start
+                start = end - slice_len
+            slice_start = min(start, slice_start)
+            slice_end = max(end, slice_end)
 
     if slice_start < slice_end:
         block = block.slice(slice_start, slice_end)
@@ -549,9 +546,7 @@ def reduce_block_by_primary_genome(block, species, chromosome, region_start):
     src = f"{species}.{chromosome}"
     ref = block.get_component_by_src(src)
     start_offset = ref.start - region_start
-    species_texts = {}
-    for c in block.components:
-        species_texts[c.src.split(".")[0]] = list(c.text)
+    species_texts = {c.src.split(".")[0]: list(c.text) for c in block.components}
     # remove locations which are gaps in the primary species, starting from the downstream end
     for i in range(len(species_texts[species]) - 1, -1, -1):
         if species_texts[species][i] == "-":
@@ -575,7 +570,7 @@ def fill_region_alignment(
     blocks = []
     for block, idx, offset in index.get_as_iterator_with_index_and_offset(primary_src, start, end):
         score = float(block.score)
-        for i in range(0, len(blocks)):
+        for i in range(len(blocks)):
             if score < blocks[i][0]:
                 blocks.insert(i, (score, idx, offset))
                 break
@@ -688,7 +683,7 @@ def iter_components_by_src(block, src):
 
 
 def get_components_by_src(block, src):
-    return [value for value in iter_components_by_src(block, src)]
+    return list(iter_components_by_src(block, src))
 
 
 def iter_components_by_src_start(block, src):
@@ -698,7 +693,7 @@ def iter_components_by_src_start(block, src):
 
 
 def get_components_by_src_start(block, src):
-    return [value for value in iter_components_by_src_start(block, src)]
+    return list(iter_components_by_src_start(block, src))
 
 
 def sort_block_components_by_block(block1, block2):
@@ -766,10 +761,7 @@ def get_attributes_from_fasta_header(header):
         region = region.split("(", 1)
         temp = region[0].split(".", 1)
         attributes["species"] = temp[0]
-        if len(temp) == 2:
-            attributes["chrom"] = temp[1]
-        else:
-            attributes["chrom"] = temp[0]
+        attributes["chrom"] = temp[1] if len(temp) == 2 else temp[0]
         region = region[1].split(")", 1)
         attributes["strand"] = region[0]
         region = region[1].lstrip(":").split("-")

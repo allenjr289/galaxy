@@ -125,7 +125,7 @@ class ColumnarDataProvider(line.RegexLineDataProvider):
 
     def parse_filter(self, filter_param_str):
         split = filter_param_str.split("-", 2)
-        if not len(split) >= 3:
+        if len(split) < 3:
             return None
         column, op, val = split
 
@@ -163,17 +163,17 @@ class ColumnarDataProvider(line.RegexLineDataProvider):
             val = float(val)
         except ValueError:
             return None
-        if "lt" == op:
+        if op == "lt":
             return lambda d: d[column] < val
-        elif "le" == op:
+        elif op == "le":
             return lambda d: d[column] <= val
-        elif "eq" == op:
+        elif op == "eq":
             return lambda d: d[column] == val
-        elif "ne" == op:
+        elif op == "ne":
             return lambda d: d[column] != val
-        elif "ge" == op:
+        elif op == "ge":
             return lambda d: d[column] >= val
-        elif "gt" == op:
+        elif op == "gt":
             return lambda d: d[column] > val
         return None
 
@@ -190,11 +190,11 @@ class ColumnarDataProvider(line.RegexLineDataProvider):
         - has: the column contains the substring `val`
         - re: the column matches the regular expression in `val`
         """
-        if "eq" == op:
+        if op == "eq":
             return lambda d: d[column] == val
-        elif "has" == op:
+        elif op == "has":
             return lambda d: val in d[column]
-        elif "re" == op:
+        elif op == "re":
             val = unquote_plus(val)
             val = re.compile(val)
             return lambda d: val.match(d[column]) is not None
@@ -212,10 +212,10 @@ class ColumnarDataProvider(line.RegexLineDataProvider):
         - eq: the list `val` exactly matches the list in the column
         - has: the list in the column contains the sublist `val`
         """
-        if "eq" == op:
+        if op == "eq":
             val = self.parse_value(val, "list")
             return lambda d: d[column] == val
-        elif "has" == op:
+        elif op == "has":
             return lambda d: val in d[column]
         return None
 
@@ -270,10 +270,10 @@ class ColumnarDataProvider(line.RegexLineDataProvider):
         all_columns = line.split(self.deliminator)
         # if no indeces were passed to init, return all columns
         selected_indeces = self.selected_column_indeces or list(range(len(all_columns)))
-        parsed_columns = []
-        for parser_index, column_index in enumerate(selected_indeces):
-            parsed_columns.append(self.parse_column_at_index(all_columns, parser_index, column_index))
-        return parsed_columns
+        return [
+            self.parse_column_at_index(all_columns, parser_index, column_index)
+            for parser_index, column_index in enumerate(selected_indeces)
+        ]
 
     def parse_column_at_index(self, columns, parser_index, index):
         """
@@ -358,5 +358,4 @@ class DictDataProvider(ColumnarDataProvider):
     def __iter__(self):
         parent_gen = super().__iter__()
         for column_values in parent_gen:
-            map = dict(zip(self.column_names, column_values))
-            yield map
+            yield dict(zip(self.column_names, column_values))

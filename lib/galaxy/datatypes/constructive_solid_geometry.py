@@ -59,9 +59,9 @@ class Ply:
         The structure of a typical PLY file:
         Header, Vertex List, Face List, (lists of other elements)
         """
-        if not self._is_ply_header(file_prefix.text_io(errors="ignore"), self.subtype):
-            return False
-        return True
+        return bool(
+            self._is_ply_header(file_prefix.text_io(errors="ignore"), self.subtype)
+        )
 
     def _is_ply_header(self, fh, subtype):
         """
@@ -93,27 +93,28 @@ class Ply:
         return False
 
     def set_meta(self, dataset, **kwd):
-        if dataset.has_data():
-            with open(dataset.file_name, errors="ignore") as fh:
-                for line in fh:
-                    line = line.strip()
-                    if not line:
-                        continue
-                    if line.startswith("format"):
-                        items = line.split()
-                        dataset.metadata.file_format = items[1]
-                    elif line == "end_header":
-                        # Metadata is complete.
-                        break
-                    elif line.startswith("element"):
-                        items = line.split()
-                        if items[1] == "face":
-                            dataset.metadata.face = int(items[2])
-                        elif items[1] == "vertex":
-                            dataset.metadata.vertex = int(items[2])
-                        else:
-                            element_tuple = (items[1], int(items[2]))
-                            dataset.metadata.other_elements.append(element_tuple)
+        if not dataset.has_data():
+            return
+        with open(dataset.file_name, errors="ignore") as fh:
+            for line in fh:
+                line = line.strip()
+                if not line:
+                    continue
+                if line.startswith("format"):
+                    items = line.split()
+                    dataset.metadata.file_format = items[1]
+                elif line == "end_header":
+                    # Metadata is complete.
+                    break
+                elif line.startswith("element"):
+                    items = line.split()
+                    if items[1] == "face":
+                        dataset.metadata.face = int(items[2])
+                    elif items[1] == "vertex":
+                        dataset.metadata.vertex = int(items[2])
+                    else:
+                        element_tuple = (items[1], int(items[2]))
+                        dataset.metadata.other_elements.append(element_tuple)
 
     def set_peek(self, dataset):
         if not dataset.dataset.purged:
@@ -232,9 +233,9 @@ class Vtk:
         styles of file formats: legacy or XML.  We'll assume if the
         file contains a valid VTK header, then it is a valid VTK file.
         """
-        if self._is_vtk_header(file_prefix.text_io(errors="ignore"), self.subtype):
-            return True
-        return False
+        return bool(
+            self._is_vtk_header(file_prefix.text_io(errors="ignore"), self.subtype)
+        )
 
     def _is_vtk_header(self, fh, subtype):
         """
@@ -268,28 +269,27 @@ class Vtk:
             return check_data_kind(line)
         # line 5:
         line = get_next_line(fh)
-        if line:
-            return check_data_kind(line)
-        return False
+        return check_data_kind(line) if line else False
 
     def set_meta(self, dataset, **kwd):
-        if dataset.has_data():
-            dataset.metadata.field_names = []
-            dataset.metadata.field_components = {}
-            dataset_type = None
-            field_components = {}
-            dataset_structure_complete = False
-            processing_field_section = False
-            with open(dataset.file_name, errors="ignore") as fh:
-                for i, line in enumerate(fh):
-                    line = line.strip()
-                    if not line:
-                        continue
-                    if i < 3:
-                        dataset = self.set_initial_metadata(i, line, dataset)
-                    elif dataset.metadata.file_format == "ASCII" or not util.is_binary(line):
-                        if dataset_structure_complete:
-                            """
+        if not dataset.has_data():
+            return
+        dataset.metadata.field_names = []
+        dataset.metadata.field_components = {}
+        dataset_type = None
+        field_components = {}
+        dataset_structure_complete = False
+        processing_field_section = False
+        with open(dataset.file_name, errors="ignore") as fh:
+            for i, line in enumerate(fh):
+                line = line.strip()
+                if not line:
+                    continue
+                if i < 3:
+                    dataset = self.set_initial_metadata(i, line, dataset)
+                elif dataset.metadata.file_format == "ASCII" or not util.is_binary(line):
+                    if dataset_structure_complete:
+                        """
                             The final part of legacy VTK files describes the dataset attributes.
                             This part begins with the keywords POINT_DATA or CELL_DATA, followed
                             by an integer number specifying the number of points or cells,
@@ -307,59 +307,59 @@ class Vtk:
                             the same file.  If the appropriate dataName is not specified in the VTK
                             reader, then the first data of that type is extracted from the file.
                             """
-                            items = line.split()
-                            if items[0] == "SCALARS":
-                                # Example: SCALARS surface_field double 3
-                                # Scalar definition includes specification of a lookup table. The
-                                # definition of a lookup table is optional. If not specified, the
-                                # default VTK table will be used, and tableName should be
-                                # "default". Also note that the numComp variable is optional.  By
-                                # default the number of components is equal to one.  The parameter
-                                # numComp must range between (1,4) inclusive; in versions of VTK
-                                # prior to vtk2.3 this parameter was not supported.
-                                field_name = items[1]
-                                dataset.metadata.field_names.append(field_name)
+                        items = line.split()
+                        if items[0] == "SCALARS":
+                            # Example: SCALARS surface_field double 3
+                            # Scalar definition includes specification of a lookup table. The
+                            # definition of a lookup table is optional. If not specified, the
+                            # default VTK table will be used, and tableName should be
+                            # "default". Also note that the numComp variable is optional.  By
+                            # default the number of components is equal to one.  The parameter
+                            # numComp must range between (1,4) inclusive; in versions of VTK
+                            # prior to vtk2.3 this parameter was not supported.
+                            field_name = items[1]
+                            dataset.metadata.field_names.append(field_name)
+                            try:
+                                num_components = int(items[-1])
+                            except Exception:
+                                num_components = 1
+                            field_component_indexes = [str(i) for i in range(num_components)]
+                            field_components[field_name] = field_component_indexes
+                        elif items[0] == "FIELD":
+                            # The dataset consists of CELL_DATA.
+                            # FIELD FieldData 2
+                            processing_field_section = True
+                            num_fields = int(items[-1])
+                            fields_processed: List[str] = []
+                        elif processing_field_section:
+                            if len(fields_processed) == num_fields:
+                                processing_field_section = False
+                            else:
                                 try:
-                                    num_components = int(items[-1])
+                                    float(items[0])
+                                    # Don't process the cell data.
+                                    # 0.0123457 0.197531
                                 except Exception:
-                                    num_components = 1
-                                field_component_indexes = [str(i) for i in range(num_components)]
-                                field_components[field_name] = field_component_indexes
-                            elif items[0] == "FIELD":
-                                # The dataset consists of CELL_DATA.
-                                # FIELD FieldData 2
-                                processing_field_section = True
-                                num_fields = int(items[-1])
-                                fields_processed: List[str] = []
-                            elif processing_field_section:
-                                if len(fields_processed) == num_fields:
-                                    processing_field_section = False
-                                else:
-                                    try:
-                                        float(items[0])
-                                        # Don't process the cell data.
-                                        # 0.0123457 0.197531
-                                    except Exception:
-                                        # Line consists of arrayName numComponents numTuples dataType.
-                                        # Example: surface_field1 1 12 double
-                                        field_name = items[0]
-                                        dataset.metadata.field_names.append(field_name)
-                                        num_components = int(items[1])
-                                        field_component_indexes = [str(i) for i in range(num_components)]
-                                        field_components[field_name] = field_component_indexes
-                                        fields_processed.append(field_name)
-                        elif line.startswith("CELL_DATA"):
-                            # CELL_DATA 3188
-                            dataset_structure_complete = True
-                            dataset.metadata.cells = int(line.split()[1])
-                        elif line.startswith("POINT_DATA"):
-                            # POINT_DATA 1876
-                            dataset_structure_complete = True
-                            dataset.metadata.points = int(line.split()[1])
-                        else:
-                            dataset, dataset_type = self.set_structure_metadata(line, dataset, dataset_type)
-            if len(field_components) > 0:
-                dataset.metadata.field_components = field_components
+                                    # Line consists of arrayName numComponents numTuples dataType.
+                                    # Example: surface_field1 1 12 double
+                                    field_name = items[0]
+                                    dataset.metadata.field_names.append(field_name)
+                                    num_components = int(items[1])
+                                    field_component_indexes = [str(i) for i in range(num_components)]
+                                    field_components[field_name] = field_component_indexes
+                                    fields_processed.append(field_name)
+                    elif line.startswith("CELL_DATA"):
+                        # CELL_DATA 3188
+                        dataset_structure_complete = True
+                        dataset.metadata.cells = int(line.split()[1])
+                    elif line.startswith("POINT_DATA"):
+                        # POINT_DATA 1876
+                        dataset_structure_complete = True
+                        dataset.metadata.points = int(line.split()[1])
+                    else:
+                        dataset, dataset_type = self.set_structure_metadata(line, dataset, dataset_type)
+        if field_components:
+            dataset.metadata.field_components = field_components
 
     def set_initial_metadata(self, i, line, dataset):
         if i == 0:
@@ -537,20 +537,21 @@ class NeperTess(data.Text):
         return file_prefix.text_io(errors="ignore").readline(10).startswith("***tess")
 
     def set_meta(self, dataset, **kwd):
-        if dataset.has_data():
-            with open(dataset.file_name, errors="ignore") as fh:
-                for i, line in enumerate(fh):
-                    line = line.strip()
-                    if not line or i > 6:
-                        break
-                    if i == 0 and not line.startswith("***tess"):
-                        break
-                    if i == 2:
-                        dataset.metadata.format = line
-                    if i == 4:
-                        dataset.metadata.dimension = int(line.split()[0])
-                    if i == 6:
-                        dataset.metadata.cells = int(line)
+        if not dataset.has_data():
+            return
+        with open(dataset.file_name, errors="ignore") as fh:
+            for i, line in enumerate(fh):
+                line = line.strip()
+                if not line or i > 6:
+                    break
+                if i == 0 and not line.startswith("***tess"):
+                    break
+                if i == 2:
+                    dataset.metadata.format = line
+                elif i == 4:
+                    dataset.metadata.dimension = int(line.split()[0])
+                elif i == 6:
+                    dataset.metadata.cells = int(line)
 
     def set_peek(self, dataset):
         if not dataset.dataset.purged:
@@ -604,36 +605,37 @@ class NeperTesr(Binary):
         return file_prefix.text_io(errors="ignore").readline(10).startswith("***tesr")
 
     def set_meta(self, dataset, **kwd):
-        if dataset.has_data():
-            with open(dataset.file_name, errors="ignore") as fh:
-                field = ""
-                for i, line in enumerate(fh):
-                    line = line.strip()
-                    if not line or i > 12:
-                        break
-                    if i == 0 and not line.startswith("***tesr"):
-                        break
-                    if line.startswith("*"):
-                        field = line
-                        continue
-                    if i == 2:
-                        dataset.metadata.format = line.split()[0]
-                        continue
-                    if i == 4:
-                        dataset.metadata.dimension = line.split()[0]
-                        continue
-                    if i == 5:
-                        dataset.metadata.size = line.split()
-                        continue
-                    if i == 6:
-                        dataset.metadata.voxsize = line.split()
-                        continue
-                    if field.startswith("*origin"):
-                        dataset.metadata.origin = line.split()
-                        continue
-                    if field.startswith("**cell"):
-                        dataset.metadata.cells = int(line)
-                        break
+        if not dataset.has_data():
+            return
+        with open(dataset.file_name, errors="ignore") as fh:
+            field = ""
+            for i, line in enumerate(fh):
+                line = line.strip()
+                if not line or i > 12:
+                    break
+                if i == 0 and not line.startswith("***tesr"):
+                    break
+                if line.startswith("*"):
+                    field = line
+                    continue
+                if i == 2:
+                    dataset.metadata.format = line.split()[0]
+                    continue
+                if i == 4:
+                    dataset.metadata.dimension = line.split()[0]
+                    continue
+                if i == 5:
+                    dataset.metadata.size = line.split()
+                    continue
+                if i == 6:
+                    dataset.metadata.voxsize = line.split()
+                    continue
+                if field.startswith("*origin"):
+                    dataset.metadata.origin = line.split()
+                    continue
+                if field.startswith("**cell"):
+                    dataset.metadata.cells = int(line)
+                    break
 
     def set_peek(self, dataset):
         if not dataset.dataset.purged:
@@ -669,12 +671,10 @@ class NeperPoints(data.Text):
                 if not line:
                     break
                 pts = len([float(x) for x in line.strip().split(sep=sep)])
-                if dim is not None and pts != dim:
+                if dim is not None and pts != dim or not 1 <= pts <= 3:
                     return None
-                elif 1 <= pts <= 3:
-                    dim = pts
                 else:
-                    return None
+                    dim = pts
                 if i > maxlines:
                     break
         except Exception:
@@ -744,20 +744,21 @@ class GmshMsh(Binary):
         return file_prefix.text_io(errors="ignore").readline().startswith("$MeshFormat")
 
     def set_meta(self, dataset, **kwd):
-        if dataset.has_data():
-            with open(dataset.file_name, errors="ignore") as fh:
-                for i, line in enumerate(fh):
-                    line = line.strip()
-                    if not line or i > 1:
-                        break
-                    if i == 0 and not line.startswith("$MeshFormat"):
-                        break
-                    if i == 1:
-                        fields = line.split()
-                        if len(fields) > 0:
-                            dataset.metadata.version = fields[0]
-                        if len(fields) > 1:
-                            dataset.metadata.format = "ASCII" if fields[1] == "0" else "binary"
+        if not dataset.has_data():
+            return
+        with open(dataset.file_name, errors="ignore") as fh:
+            for i, line in enumerate(fh):
+                line = line.strip()
+                if not line or i > 1:
+                    break
+                if i == 0 and not line.startswith("$MeshFormat"):
+                    break
+                if i == 1:
+                    fields = line.split()
+                    if len(fields) > 0:
+                        dataset.metadata.version = fields[0]
+                    if len(fields) > 1:
+                        dataset.metadata.format = "ASCII" if fields[1] == "0" else "binary"
 
     def set_peek(self, dataset):
         if not dataset.dataset.purged:

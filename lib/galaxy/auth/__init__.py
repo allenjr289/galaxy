@@ -107,8 +107,7 @@ class AuthManager:
         """
         try:
             for authenticator in self.authenticators:
-                filter_template = authenticator.filter_template
-                if filter_template:
+                if filter_template := authenticator.filter_template:
                     filter_str = filter_template.format(email=email, username=username, password=password)
                     passed_filter = eval(filter_str, {"__builtins__": None}, {"str": str})
                     if not passed_filter:
@@ -124,7 +123,4 @@ class AuthManager:
 def _get_allow_register(d):
     s = d.get("allow-register", True)
     lower_s = str(s).lower()
-    if lower_s == "challenge":
-        return lower_s
-    else:
-        return string_as_bool(s)
+    return lower_s if lower_s == "challenge" else string_as_bool(s)

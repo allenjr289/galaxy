@@ -132,18 +132,14 @@ def configure_logging(config, facts=None):
     facts = facts or get_facts(config=config)
     # Get root logger
     logging.addLevelName(LOGLV_TRACE, "TRACE")
-    # PasteScript will have already configured the logger if the
-    # 'loggers' section was found in the config file, otherwise we do
-    # some simple setup using the 'log_*' values from the config.
-    parser = getattr(config, "global_conf_parser", None)
-    if parser:
+    if parser := getattr(config, "global_conf_parser", None):
         paste_configures_logging = config.global_conf_parser.has_section("loggers")
     else:
         paste_configures_logging = False
-    auto_configure_logging = not paste_configures_logging and string_as_bool(
-        config.get("auto_configure_logging", "True")
-    )
-    if auto_configure_logging:
+    if (
+        auto_configure_logging := not paste_configures_logging
+        and string_as_bool(config.get("auto_configure_logging", "True"))
+    ):
         logging_conf = config.get("logging", None)
         if logging_conf is None:
             # if using the default logging config, honor the log_level setting
@@ -412,10 +408,7 @@ class BaseAppConfiguration(HasDynamicProperties):
             if value is not None and datatype in type_converters:
                 # convert value or each item in value to type `datatype`
                 f = type_converters[datatype]
-                if isinstance(value, list):
-                    return [f(item) for item in value]
-                else:
-                    return f(value)
+                return [f(item) for item in value] if isinstance(value, list) else f(value)
             return value
 
         def strip_deprecated_dir(key, value):
@@ -437,9 +430,7 @@ class BaseAppConfiguration(HasDynamicProperties):
                         paths[i] = path[len(ignore) :]
 
                 # return list or string, depending on type of `value`
-                if isinstance(value, list):
-                    return paths
-                return ",".join(paths)
+                return paths if isinstance(value, list) else ",".join(paths)
             return value
 
         for key, value in kwargs.items():
@@ -469,11 +460,7 @@ class BaseAppConfiguration(HasDynamicProperties):
             if not parent:  # base case: nothing else needs resolving
                 return path
             parent_path = resolve(parent)  # recursively resolve parent path
-            if path is not None:
-                path = os.path.join(parent_path, path)  # resolve path
-            else:
-                path = parent_path  # or use parent path
-
+            path = os.path.join(parent_path, path) if path is not None else parent_path
             setattr(self, key, path)  # update property
             _cache[key] = path  # cache it!
             return path
@@ -541,9 +528,7 @@ class BaseAppConfiguration(HasDynamicProperties):
         return self._in_dir(self.data_dir, path)
 
     def _in_dir(self, _dir: str, path: OptStr) -> OptStr:
-        if path is not None:
-            return os.path.join(_dir, path)
-        return None
+        return os.path.join(_dir, path) if path is not None else None
 
 
 class CommonConfigurationMixin:
@@ -707,8 +692,7 @@ class GalaxyAppConfiguration(BaseAppConfiguration, CommonConfigurationMixin):
         This method should be deleted after migration to SQLAlchemy 2.0 is complete.
         To enable warnings, set `GALAXY_CONFIG_SQLALCHEMY_WARN_20=1`,
         """
-        warn = string_as_bool(kwargs.get("sqlalchemy_warn_20", False))
-        if warn:
+        if warn := string_as_bool(kwargs.get("sqlalchemy_warn_20", False)):
             import sqlalchemy
 
             sqlalchemy.util.deprecations.SQLALCHEMY_WARN_20 = True

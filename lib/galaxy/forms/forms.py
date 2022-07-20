@@ -54,8 +54,7 @@ class FormDefinitionFactory:
         form_type = elem.get("type", None)
         # load layout
         layout = []
-        layouts_elem = elem.find("layout")
-        if layouts_elem:
+        if layouts_elem := elem.find("layout"):
             for layout_elem in layouts_elem.findall("grid"):
                 layout_name = layout_elem.get("name", None)
                 assert layout_name and layout_name not in layout, "Layout grid element requires a unique name."
@@ -89,17 +88,13 @@ class FormDefinitionFieldFactory:
         """
         Return new FormDefinition field.
         """
-        rval = {}
         assert name, "Must provide a name"
-        rval["name"] = name
-        if not label:
-            rval["label"] = name
-        else:
-            rval["label"] = label
-        if required:
-            rval["required"] = "required"
-        else:
-            rval["required"] = "optional"
+        rval = {
+            "name": name,
+            "label": label or name,
+            "required": "required" if required else "optional",
+        }
+
         if helptext is None:
             helptext = ""
         rval["helptext"] = helptext
@@ -143,10 +138,7 @@ class FormDefinitionTextFieldFactory(FormDefinitionFieldFactory):
     type = "text"
 
     def __get_stored_field_type(self, area):
-        if area:
-            return "TextArea"
-        else:
-            return "TextField"
+        return "TextArea" if area else "TextField"
 
     def new(
         self, name=None, label=None, required=False, helptext=None, default=None, visible=True, layout=None, area=False
@@ -336,10 +328,7 @@ class FormDefinitionSelectFieldFactory(FormDefinitionFieldFactory):
     type = "select"
 
     def __get_stored_field_type(self, checkboxes):
-        if checkboxes:
-            return "CheckboxField"
-        else:
-            return "SelectField"
+        return "CheckboxField" if checkboxes else "SelectField"
 
     def new(
         self,

@@ -79,10 +79,10 @@ def __main__():
     # if so, we want to keep extended columns, otherwise we'll create a generic 6 column bed file
     strict_bed = True
     if (
-        extension in ["bed", "bedstrict", "bed6", "bed12"]
+        extension in {"bed", "bedstrict", "bed6", "bed12"}
         and (chromCol, startCol, endCol) == (0, 1, 2)
-        and (nameCol < 0 or nameCol == 3)
-        and (strandCol < 0 or strandCol == 5)
+        and ((nameCol < 0 or nameCol == 3))
+        and ((strandCol < 0 or strandCol == 5))
     ):
         with open(input_name) as fh, open(output_name, "w") as out:
             for count, line in enumerate(fh):
@@ -135,15 +135,14 @@ def __main__():
                                                     )  # remove trailing comma and split on comma
                                                     for field in fields2:
                                                         int(field)
-                                                if len(fields) > 11:
-                                                    if (
-                                                        fields[11] != ","
-                                                    ):  # blockStarts - A comma-separated list of block starts. All of the blockStart positions should be calculated relative to chromStart. The number of items in this list should correspond to blockCount.
-                                                        fields2 = (
-                                                            fields[11].rstrip(",").split(",")
-                                                        )  # remove trailing comma and split on comma
-                                                        for field in fields2:
-                                                            int(field)
+                                                if len(fields) > 11 and (
+                                                    fields[11] != ","
+                                                ):
+                                                    fields2 = (
+                                                        fields[11].rstrip(",").split(",")
+                                                    )  # remove trailing comma and split on comma
+                                                    for field in fields2:
+                                                        int(field)
                 except Exception:
                     strict_bed = False
                     break

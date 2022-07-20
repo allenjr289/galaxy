@@ -15,18 +15,18 @@ def getbuilds(url):
     try:
         text = requests.get(url).text
     except Exception:
-        print("#Unable to open " + url)
+        print(f"#Unable to open {url}")
         print("?\tunspecified (?)")
         sys.exit(1)
 
     try:
         tree = ElementTree.fromstring(text)
     except Exception:
-        print("#Invalid xml passed back from " + url)
+        print(f"#Invalid xml passed back from {url}")
         print("?\tunspecified (?)")
         sys.exit(1)
 
-    print("#Harvested from " + url)
+    print(f"#Harvested from {url}")
     print("?\tunspecified (?)")
     for dsn in tree:
         build = dsn.find("SOURCE").attrib["id"]

@@ -62,8 +62,11 @@ class Shapefile(Binary):
         )
 
     def generate_primary_file(self, dataset=None):
-        rval = ["<html><head><title>Shapefile Galaxy Composite Dataset</title></head><p/>"]
-        rval.append("<div>This composite dataset is composed of the following files:<p/><ul>")
+        rval = [
+            "<html><head><title>Shapefile Galaxy Composite Dataset</title></head><p/>",
+            "<div>This composite dataset is composed of the following files:<p/><ul>",
+        ]
+
         for composite_name, composite_file in self.get_composite_files(dataset=dataset).items():
             fn = composite_name
             opt_text = ""

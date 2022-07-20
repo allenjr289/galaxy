@@ -183,9 +183,14 @@ class TabularData(data.Text):
         """Create HTML table, used for displaying peek"""
         out = ['<table cellspacing="0" cellpadding="3">']
         try:
-            out.append(self.make_html_peek_header(dataset, **kwargs))
-            out.append(self.make_html_peek_rows(dataset, **kwargs))
-            out.append("</table>")
+            out.extend(
+                (
+                    self.make_html_peek_header(dataset, **kwargs),
+                    self.make_html_peek_rows(dataset, **kwargs),
+                    "</table>",
+                )
+            )
+
             out = "".join(out)
         except Exception as exc:
             out = f"Can't create peek: {util.unicodify(exc)}"
@@ -275,8 +280,7 @@ class TabularData(data.Text):
                             out.append(f'<tr><td colspan="100%">{escape(line)}</td></tr>')
                         else:
                             out.append("<tr>")
-                            for elem in elems:
-                                out.append(f"<td>{escape(elem)}</td>")
+                            out.extend(f"<td>{escape(elem)}</td>" for elem in elems)
                             out.append("</tr>")
         except Exception as exc:
             log.exception("make_html_peek_rows failed on HDA %s", dataset.id)
@@ -391,18 +395,14 @@ class Tabular(TabularData):
                 float(column_text)
                 return True
             except ValueError:
-                if column_text.strip().lower() == "na":
-                    return True  # na is special cased to be a float
-                return False
+                return column_text.strip().lower() == "na"
 
         def is_list(column_text):
             return "," in column_text
 
         def is_str(column_text):
             # anything, except an empty string, is True
-            if column_text == "":
-                return False
-            return True
+            return column_text != ""
 
         is_column_type = {}  # Dict to store column type string to checking function
         for column_type in column_type_set_order:
@@ -666,8 +666,7 @@ class Sam(Tabular, _BamOrSam):
         """
         count = 0
         for line in file_prefix.line_iterator():
-            line = line.strip()
-            if line:
+            if line := line.strip():
                 if line[0] != "@":
                     line_pieces = line.split("\t")
                     if len(line_pieces) < 11:
@@ -683,9 +682,7 @@ class Sam(Tabular, _BamOrSam):
                     count += 1
                     if count == 5:
                         return True
-        if count < 5 and count > 0:
-            return True
-        return False
+        return count < 5 and count > 0
 
     def set_meta(self, dataset, overwrite=True, skip=None, max_data_lines=5, **kwd):
         """
@@ -708,45 +705,46 @@ class Sam(Tabular, _BamOrSam):
         >>> hda.metadata.reference_names
         ['ref', 'ref2']
         """
-        if dataset.has_data():
-            with open(dataset.file_name) as dataset_fh:
-                comment_lines = 0
-                if (
-                    self.max_optional_metadata_filesize >= 0
-                    and dataset.get_size() > self.max_optional_metadata_filesize
-                ):
-                    # If the dataset is larger than optional_metadata, just count comment lines.
-                    for line in dataset_fh:
-                        if line.startswith("@"):
-                            comment_lines += 1
-                        else:
-                            # No more comments, and the file is too big to look at the whole thing. Give up.
-                            dataset.metadata.data_lines = None
-                            break
-                else:
-                    # Otherwise, read the whole thing and set num data lines.
-                    for i, l in enumerate(dataset_fh):  # noqa: B007
-                        if l.startswith("@"):
-                            comment_lines += 1
-                    dataset.metadata.data_lines = i + 1 - comment_lines
-            dataset.metadata.comment_lines = comment_lines
-            dataset.metadata.columns = 12
-            dataset.metadata.column_types = [
-                "str",
-                "int",
-                "str",
-                "int",
-                "int",
-                "str",
-                "str",
-                "int",
-                "int",
-                "str",
-                "str",
-                "str",
-            ]
+        if not dataset.has_data():
+            return
+        with open(dataset.file_name) as dataset_fh:
+            comment_lines = 0
+            if (
+                self.max_optional_metadata_filesize >= 0
+                and dataset.get_size() > self.max_optional_metadata_filesize
+            ):
+                # If the dataset is larger than optional_metadata, just count comment lines.
+                for line in dataset_fh:
+                    if line.startswith("@"):
+                        comment_lines += 1
+                    else:
+                        # No more comments, and the file is too big to look at the whole thing. Give up.
+                        dataset.metadata.data_lines = None
+                        break
+            else:
+                # Otherwise, read the whole thing and set num data lines.
+                for i, l in enumerate(dataset_fh):  # noqa: B007
+                    if l.startswith("@"):
+                        comment_lines += 1
+                dataset.metadata.data_lines = i + 1 - comment_lines
+        dataset.metadata.comment_lines = comment_lines
+        dataset.metadata.columns = 12
+        dataset.metadata.column_types = [
+            "str",
+            "int",
+            "str",
+            "int",
+            "int",
+            "str",
+            "str",
+            "int",
+            "int",
+            "str",
+            "str",
+            "str",
+        ]
 
-            _BamOrSam().set_meta(dataset)
+        _BamOrSam().set_meta(dataset)
 
     @staticmethod
     def merge(split_files, output_file):
@@ -1151,15 +1149,31 @@ class Eland(Tabular):
         try:
             # Generate column header
             out.append("<tr>")
-            for i, name in enumerate(self.column_names):
-                out.append(f"<th>{str(i + 1)}.{name}</th>")
+            out.extend(
+                f"<th>{str(i + 1)}.{name}</th>"
+                for i, name in enumerate(self.column_names)
+            )
+
             # This data type requires at least 11 columns in the data
             if dataset.metadata.columns - len(self.column_names) > 0:
-                for i in range(len(self.column_names), max(dataset.metadata.columns, self.max_peek_columns)):
-                    out.append(f"<th>{str(i + 1)}</th>")
+                out.extend(
+                    f"<th>{str(i + 1)}</th>"
+                    for i in range(
+                        len(self.column_names),
+                        max(dataset.metadata.columns, self.max_peek_columns),
+                    )
+                )
+
                 out.append("</tr>")
-            out.append(self.make_html_peek_rows(dataset, skipchars=skipchars, peek=peek))
-            out.append("</table>")
+            out.extend(
+                (
+                    self.make_html_peek_rows(
+                        dataset, skipchars=skipchars, peek=peek
+                    ),
+                    "</table>",
+                )
+            )
+
             out = "".join(out)
         except Exception as exc:
             out = f"Can't create peek {exc}"
@@ -1183,79 +1197,80 @@ class Eland(Tabular):
             line = line.strip()
             if not line:
                 break  # Had a EOF comment previously, but this does not indicate EOF. I assume empty lines are not valid and this was intentional.
-            if line:
-                line_pieces = line.split("\t")
-                if len(line_pieces) != 22:
-                    return False
-                if int(line_pieces[1]) < 0:
-                    raise Exception("Out of range")
-                if int(line_pieces[2]) < 0:
-                    raise Exception("Out of range")
-                if int(line_pieces[3]) < 0:
-                    raise Exception("Out of range")
-                int(line_pieces[4])
-                int(line_pieces[5])
-                # can get a lot more specific
-                count += 1
-                if count == 5:
-                    break
+            line_pieces = line.split("\t")
+            if len(line_pieces) != 22:
+                return False
+            if int(line_pieces[1]) < 0:
+                raise Exception("Out of range")
+            if int(line_pieces[2]) < 0:
+                raise Exception("Out of range")
+            if int(line_pieces[3]) < 0:
+                raise Exception("Out of range")
+            int(line_pieces[4])
+            int(line_pieces[5])
+            # can get a lot more specific
+            count += 1
+            if count == 5:
+                break
         if count > 0:
             return True
 
     def set_meta(self, dataset, overwrite=True, skip=None, max_data_lines=5, **kwd):
-        if dataset.has_data():
-            with compression_utils.get_fileobj(dataset.file_name, compressed_formats=["gzip"]) as dataset_fh:
-                lanes = {}
-                tiles = {}
-                barcodes = {}
-                reads = {}
-                # Should always read the entire file (until we devise a more clever way to pass metadata on)
-                # if self.max_optional_metadata_filesize >= 0 and dataset.get_size() > self.max_optional_metadata_filesize:
-                # If the dataset is larger than optional_metadata, just count comment lines.
-                #     dataset.metadata.data_lines = None
-                # else:
-                # Otherwise, read the whole thing and set num data lines.
-                for i, line in enumerate(dataset_fh):
-                    if line:
-                        line_pieces = line.split("\t")
-                        if len(line_pieces) != 22:
-                            raise Exception("%s:%d:Corrupt line!" % (dataset.file_name, i))
-                        lanes[line_pieces[2]] = 1
-                        tiles[line_pieces[3]] = 1
-                        barcodes[line_pieces[6]] = 1
-                        reads[line_pieces[7]] = 1
-                dataset.metadata.data_lines = i + 1
-            dataset.metadata.comment_lines = 0
-            dataset.metadata.columns = 21
-            dataset.metadata.column_types = [
-                "str",
-                "int",
-                "int",
-                "int",
-                "int",
-                "int",
-                "str",
-                "int",
-                "str",
-                "str",
-                "str",
-                "str",
-                "str",
-                "str",
-                "str",
-                "str",
-                "str",
-                "str",
-                "str",
-                "str",
-                "str",
-            ]
-            dataset.metadata.lanes = list(lanes.keys())
-            dataset.metadata.tiles = ["%04d" % int(t) for t in tiles.keys()]
-            dataset.metadata.barcodes = [_ for _ in barcodes.keys() if _ != "0"] + [
-                "NoIndex" for _ in barcodes.keys() if _ == "0"
-            ]
-            dataset.metadata.reads = list(reads.keys())
+        if not dataset.has_data():
+            return
+        with compression_utils.get_fileobj(dataset.file_name, compressed_formats=["gzip"]) as dataset_fh:
+            lanes = {}
+            tiles = {}
+            barcodes = {}
+            reads = {}
+            # Should always read the entire file (until we devise a more clever way to pass metadata on)
+            # if self.max_optional_metadata_filesize >= 0 and dataset.get_size() > self.max_optional_metadata_filesize:
+            # If the dataset is larger than optional_metadata, just count comment lines.
+            #     dataset.metadata.data_lines = None
+            # else:
+            # Otherwise, read the whole thing and set num data lines.
+            for i, line in enumerate(dataset_fh):
+                if line:
+                    line_pieces = line.split("\t")
+                    if len(line_pieces) != 22:
+                        raise Exception("%s:%d:Corrupt line!" % (dataset.file_name, i))
+                    lanes[line_pieces[2]] = 1
+                    tiles[line_pieces[3]] = 1
+                    barcodes[line_pieces[6]] = 1
+                    reads[line_pieces[7]] = 1
+            dataset.metadata.data_lines = i + 1
+        dataset.metadata.comment_lines = 0
+        dataset.metadata.columns = 21
+        dataset.metadata.column_types = [
+            "str",
+            "int",
+            "int",
+            "int",
+            "int",
+            "int",
+            "str",
+            "int",
+            "str",
+            "str",
+            "str",
+            "str",
+            "str",
+            "str",
+            "str",
+            "str",
+            "str",
+            "str",
+            "str",
+            "str",
+            "str",
+        ]
+        dataset.metadata.lanes = list(lanes.keys())
+        dataset.metadata.tiles = ["%04d" % int(t) for t in tiles]
+        dataset.metadata.barcodes = [_ for _ in barcodes if _ != "0"] + [
+            "NoIndex" for _ in barcodes if _ == "0"
+        ]
+
+        dataset.metadata.reads = list(reads.keys())
 
 
 @build_sniff_from_prefix
@@ -1316,17 +1331,12 @@ class BaseCSV(TabularData):
             float(column_text)
             return True
         except ValueError:
-            if column_text.strip().lower() == "na":
-                return True  # na is special cased to be a float
-            return False
+            return column_text.strip().lower() == "na"
 
     def guess_type(self, text):
         if self.is_int(text):
             return "int"
-        if self.is_float(text):
-            return "float"
-        else:
-            return "str"
+        return "float" if self.is_float(text) else "str"
 
     def sniff(self, filename):
         """Return True if if recognizes dialect and header."""
@@ -1356,10 +1366,6 @@ class BaseCSV(TabularData):
                 if len(data_row) < 2:
                     # No columns so not separated by this dialect.
                     return False
-                # ignore the length in the rest
-                for _ in reader:
-                    pass
-
         # Optional: Check Python's csv comes up with a similar dialect
         with open(filename) as f:
             big_peek = f.read(self.big_peek_size)
@@ -1376,12 +1382,9 @@ class BaseCSV(TabularData):
         # Note: No way around Python's csv calling Sniffer.sniff again.
         # Note: Without checking the dialect returned by sniff
         #       this test may be checking the wrong dialect.
-        if not csv.Sniffer().has_header(big_peek):
-            return False
-        return True
+        return bool(csv.Sniffer().has_header(big_peek))
 
     def set_meta(self, dataset, **kwd):
-        column_types = []
         header_row = []
         data_row = []
         data_lines = 0
@@ -1392,8 +1395,6 @@ class BaseCSV(TabularData):
                 try:
                     header_row = next(reader)
                     data_row = next(reader)
-                    for _ in reader:
-                        pass
                 except StopIteration:
                     pass
                 except csv.Error as e:
@@ -1401,10 +1402,7 @@ class BaseCSV(TabularData):
                 else:
                     data_lines = reader.line_num - 1
 
-        # Guess column types
-        for cell in data_row:
-            column_types.append(self.guess_type(cell))
-
+        column_types = [self.guess_type(cell) for cell in data_row]
         # Set metadata
         dataset.metadata.data_lines = data_lines
         dataset.metadata.comment_lines = int(bool(header_row))
@@ -1512,20 +1510,19 @@ class ConnectivityTable(Tabular):
 
             if len(line) > 0:
                 if i == 0:
-                    if not self.header_regexp.match(line):
-                        return False
-                    else:
+                    if self.header_regexp.match(line):
                         length = int(re.split(r"\W+", line, 1)[0])
-                else:
-                    if not self.structure_regexp.match(line.upper()):
-                        return False
                     else:
-                        if j != int(re.split(r"\W+", line, 1)[0]):
-                            return False
-                        elif j == length:  # Last line of first sequence has been reached
-                            return True
-                        else:
-                            j += 1
+                        return False
+                elif not self.structure_regexp.match(line.upper()):
+                    return False
+                else:
+                    if j != int(re.split(r"\W+", line, 1)[0]):
+                        return False
+                    elif j == length:  # Last line of first sequence has been reached
+                        return True
+                    else:
+                        j += 1
                 i += 1
         return False
 
@@ -1599,33 +1596,31 @@ class MatrixMarket(TabularData):
         return file_prefix.startswith("%%MatrixMarket matrix coordinate")
 
     def set_meta(self, dataset, overwrite=True, skip=None, max_data_lines=5, **kwd):
-        if dataset.has_data():
+        if not dataset.has_data():
+            return
             # If the dataset is larger than optional_metadata, just count comment lines.
-            with open(dataset.file_name) as dataset_fh:
-                line = ""
-                data_lines = 0
-                comment_lines = 0
-                # If the dataset is larger than optional_metadata, just count comment lines.
-                count_comments_only = (
-                    self.max_optional_metadata_filesize >= 0
-                    and dataset.get_size() > self.max_optional_metadata_filesize
-                )
-                for line in dataset_fh:
-                    if line.startswith("%"):
-                        comment_lines += 1
-                    elif count_comments_only:
-                        data_lines = None
-                        break
-                    else:
-                        data_lines += 1
-                if " " in line:
-                    dataset.metadata.delimiter = " "
+        with open(dataset.file_name) as dataset_fh:
+            line = ""
+            data_lines = 0
+            comment_lines = 0
+            # If the dataset is larger than optional_metadata, just count comment lines.
+            count_comments_only = (
+                self.max_optional_metadata_filesize >= 0
+                and dataset.get_size() > self.max_optional_metadata_filesize
+            )
+            for line in dataset_fh:
+                if line.startswith("%"):
+                    comment_lines += 1
+                elif count_comments_only:
+                    data_lines = None
+                    break
                 else:
-                    dataset.metadata.delimiter = "\t"
-            dataset.metadata.comment_lines = comment_lines
-            dataset.metadata.data_lines = data_lines
-            dataset.metadata.columns = 3
-            dataset.metadata.column_types = ["int", "int", "float"]
+                    data_lines += 1
+            dataset.metadata.delimiter = " " if " " in line else "\t"
+        dataset.metadata.comment_lines = comment_lines
+        dataset.metadata.data_lines = data_lines
+        dataset.metadata.columns = 3
+        dataset.metadata.column_types = ["int", "int", "float"]
 
 
 @build_sniff_from_prefix
@@ -1720,62 +1715,63 @@ class CMAP(TabularData):
         return False
 
     def set_meta(self, dataset, overwrite=True, skip=None, max_data_lines=7, **kwd):
-        if dataset.has_data():
-            with open(dataset.file_name) as dataset_fh:
-                comment_lines = 0
-                column_headers = None
-                cleaned_column_types = None
-                number_of_columns = 0
-                for i, line in enumerate(dataset_fh):
-                    line = line.strip("\n")
-                    if line.startswith("#"):
+        if not dataset.has_data():
+            return
+        with open(dataset.file_name) as dataset_fh:
+            comment_lines = 0
+            column_headers = None
+            cleaned_column_types = None
+            number_of_columns = 0
+            for i, line in enumerate(dataset_fh):
+                line = line.strip("\n")
+                if line.startswith("#"):
 
-                        if line.startswith("#h"):
+                    if line.startswith("#h"):
 
-                            column_headers = line.split("\t")[1:]
-                        elif line.startswith("#f"):
-                            cleaned_column_types = []
-                            for column_type in line.split("\t")[1:]:
-                                if column_type == "Hex":
-                                    cleaned_column_types.append("str")
-                                else:
-                                    cleaned_column_types.append(column_type)
-                        comment_lines += 1
-                        fields = line.split("\t")
-                        if len(fields) == 2:
-                            if fields[0] == "# CMAP File Version:":
-                                dataset.metadata.cmap_version = fields[1]
-                            elif fields[0] == "# Label Channels:":
-                                dataset.metadata.label_channels = int(fields[1])
-                            elif fields[0] == "# Nickase Recognition Site 1:":
-                                fields2 = fields[1].split(";")
-                                if len(fields2) == 2:
-                                    dataset.metadata.channel_1_color = fields2[1]
-                                dataset.metadata.nickase_recognition_site_1 = fields2[0].split(",")
-                            elif fields[0] == "# Number of Consensus Maps:":
-                                dataset.metadata.number_of_consensus_nanomaps = int(fields[1])
-                            elif fields[0] == "# Nickase Recognition Site 2:":
-                                fields2 = fields[1].split(";")
-                                if len(fields2) == 2:
-                                    dataset.metadata.channel_2_color = fields2[1]
-                                dataset.metadata.nickase_recognition_site_2 = fields2[0].split(",")
-                    elif (
-                        self.max_optional_metadata_filesize >= 0
-                        and dataset.get_size() > self.max_optional_metadata_filesize
-                    ):
-                        # If the dataset is larger than optional_metadata, just count comment lines.
-                        # No more comments, and the file is too big to look at the whole thing. Give up.
-                        dataset.metadata.data_lines = None
-                        break
-                    elif i == comment_lines + 1:
-                        number_of_columns = len(line.split("\t"))
-                if not (
+                        column_headers = line.split("\t")[1:]
+                    elif line.startswith("#f"):
+                        cleaned_column_types = []
+                        for column_type in line.split("\t")[1:]:
+                            if column_type == "Hex":
+                                cleaned_column_types.append("str")
+                            else:
+                                cleaned_column_types.append(column_type)
+                    comment_lines += 1
+                    fields = line.split("\t")
+                    if len(fields) == 2:
+                        if fields[0] == "# CMAP File Version:":
+                            dataset.metadata.cmap_version = fields[1]
+                        elif fields[0] == "# Label Channels:":
+                            dataset.metadata.label_channels = int(fields[1])
+                        elif fields[0] == "# Nickase Recognition Site 1:":
+                            fields2 = fields[1].split(";")
+                            if len(fields2) == 2:
+                                dataset.metadata.channel_1_color = fields2[1]
+                            dataset.metadata.nickase_recognition_site_1 = fields2[0].split(",")
+                        elif fields[0] == "# Number of Consensus Maps:":
+                            dataset.metadata.number_of_consensus_nanomaps = int(fields[1])
+                        elif fields[0] == "# Nickase Recognition Site 2:":
+                            fields2 = fields[1].split(";")
+                            if len(fields2) == 2:
+                                dataset.metadata.channel_2_color = fields2[1]
+                            dataset.metadata.nickase_recognition_site_2 = fields2[0].split(",")
+                elif (
                     self.max_optional_metadata_filesize >= 0
                     and dataset.get_size() > self.max_optional_metadata_filesize
                 ):
-                    dataset.metadata.data_lines = i + 1 - comment_lines
-            dataset.metadata.comment_lines = comment_lines
-            dataset.metadata.column_names = column_headers
-            dataset.metadata.column_types = cleaned_column_types
-            dataset.metadata.columns = number_of_columns
-            dataset.metadata.delimiter = "\t"
+                    # If the dataset is larger than optional_metadata, just count comment lines.
+                    # No more comments, and the file is too big to look at the whole thing. Give up.
+                    dataset.metadata.data_lines = None
+                    break
+                elif i == comment_lines + 1:
+                    number_of_columns = len(line.split("\t"))
+            if not (
+                self.max_optional_metadata_filesize >= 0
+                and dataset.get_size() > self.max_optional_metadata_filesize
+            ):
+                dataset.metadata.data_lines = i + 1 - comment_lines
+        dataset.metadata.comment_lines = comment_lines
+        dataset.metadata.column_names = column_headers
+        dataset.metadata.column_types = cleaned_column_types
+        dataset.metadata.columns = number_of_columns
+        dataset.metadata.delimiter = "\t"

@@ -101,9 +101,7 @@ class QIIME2Metadata(Tabular):
     _search_lines = 2
 
     def get_column_names(self, first_line=None):
-        if first_line is None:
-            return None
-        return first_line.strip().split("\t")
+        return None if first_line is None else first_line.strip().split("\t")
 
     def set_meta(self, dataset, **kwargs):
         """
@@ -131,20 +129,17 @@ class QIIME2Metadata(Tabular):
 
             for idx, (q2_type, col_type) in enumerate(zip(q2_types, dataset.metadata.column_types)):
                 if q2_type == "":
-                    if col_type in ("float", "int"):
-                        q2_types[idx] = "numeric"
-                    else:
-                        q2_types[idx] = "categorical"
-                else:
-                    if q2_type == "categorical" and col_type in ("float", "int", "list"):
-                        dataset.metadata.column_types[idx] = "str"
+                    q2_types[idx] = "numeric" if col_type in ("float", "int") else "categorical"
+                elif q2_type == "categorical" and col_type in ("float", "int", "list"):
+                    dataset.metadata.column_types[idx] = "str"
 
     def sniff_prefix(self, file_prefix):
-        for _, line in zip(range(self._search_lines), file_prefix.line_iterator()):
-            if line.startswith(self._TYPES_DIRECTIVE):
-                return True
-
-        return False
+        return any(
+            line.startswith(self._TYPES_DIRECTIVE)
+            for _, line in zip(
+                range(self._search_lines), file_prefix.line_iterator()
+            )
+        )
 
 
 ##############################################################################
@@ -236,12 +231,13 @@ def _get_metadata_contents(path, uuid):
 
 
 def _get_uuid(path):
-    roots = set()
-    for relpath in _iter_zip_root(path):
-        if not relpath.startswith("."):
-            roots.add(relpath)
+    roots = {
+        relpath
+        for relpath in _iter_zip_root(path)
+        if not relpath.startswith(".")
+    }
 
-    if len(roots) == 0:
+    if not roots:
         raise ValueError("Archive does not have a visible root directory.")
     if len(roots) > 1:
         raise ValueError("Archive has multiple root directories: %r" % roots)

@@ -103,16 +103,17 @@ class LDAP(AuthProvider):
             if not username:
                 log.debug("LDAP authenticate: username must be used to login, cannot be None")
                 return ok, failure_mode
-        else:
-            if not email:
-                log.debug("LDAP authenticate: email must be used to login, cannot be None")
-                return ok, failure_mode
+        elif not email:
+            log.debug("LDAP authenticate: email must be used to login, cannot be None")
+            return ok, failure_mode
 
         auto_create_roles = string_as_bool(options.get("auto-create-roles", False))
         auto_create_groups = string_as_bool(options.get("auto-create-groups", False))
         self.auto_create_roles_or_groups = auto_create_roles or auto_create_groups
         auto_assign_roles_to_groups_only = string_as_bool(options.get("auto-assign-roles-to-groups-only", False))
-        if auto_assign_roles_to_groups_only and not (auto_create_roles and auto_create_groups):
+        if auto_assign_roles_to_groups_only and (
+            not auto_create_roles or not auto_create_groups
+        ):
             raise ConfigurationError(
                 "If 'auto-assign-roles-to-groups-only' is True, auto-create-roles and "
                 "auto-create-groups have to be True as well."
@@ -232,7 +233,10 @@ class LDAP(AuthProvider):
         # check whether the user is a member of a specified group/domain/...
         if "search-memberof-filter" in options:
             search_filter = _get_subs(options, "search-memberof-filter", params)
-            if not any(search_filter in ad_node_name for ad_node_name in params["memberOf"]):
+            if all(
+                search_filter not in ad_node_name
+                for ad_node_name in params["memberOf"]
+            ):
                 return failure_mode, "", ""
 
         attributes = {}

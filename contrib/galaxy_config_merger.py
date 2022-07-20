@@ -60,31 +60,32 @@ def main():
     logging.info("---------- DIFFERENCE ANALYSIS BEGIN ----------")
     for section in config.sections():
         if not config_sample.has_section(section):
-            logging.warning("-MISSING- section [%s] not found in sample file. It will be ignored." % section)
+            logging.warning(
+                f"-MISSING- section [{section}] not found in sample file. It will be ignored."
+            )
+
         else:
             for (name, value) in config.items(section):
-                if not config_sample.has_option(section, name):
-                    if not "#%s" % name in config_sample_content:
-                        logging.warning(
-                            f"-MISSING- section [{section}] option '{name}' not found in sample file. It will be ignored."
-                        )
-                    else:
-                        logging.info(
-                            f"-notset- section [{section}] option '{name}' not set in sample file. It will be added."
-                        )
-                        config_sample.set(section, name, value)
-                else:
-                    if not config_sample.get(section, name) == value:
+                if config_sample.has_option(section, name):
+                    if config_sample.get(section, name) != value:
                         logging.info(
                             f"- diff - section [{section}] option '{name}' has different value ('{config_sample.get(section, name)}':'{value}'). It will be modified."
                         )
                         config_sample.set(section, name, value)
+                elif f"#{name}" not in config_sample_content:
+                    logging.warning(
+                        f"-MISSING- section [{section}] option '{name}' not found in sample file. It will be ignored."
+                    )
+                else:
+                    logging.info(
+                        f"-notset- section [{section}] option '{name}' not set in sample file. It will be added."
+                    )
+                    config_sample.set(section, name, value)
     logging.info("---------- DIFFERENCE ANALYSIS END   ----------")
 
     if options.output:
-        outputfile = open(options.output, "w")
-        config_sample.write(outputfile)
-        outputfile.close()
+        with open(options.output, "w") as outputfile:
+            config_sample.write(outputfile)
     else:
         logging.info("use -o OUTPUT to write the merged configuration into a file.")
 

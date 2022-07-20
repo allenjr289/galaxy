@@ -371,9 +371,14 @@ class ConfiguresGalaxyMixin:
             self.config.thread_local_log,
             self.config.database_log_query_counts,
         )
-        install_engine = None
-        if not combined_install_database:
-            install_engine = build_engine(install_db_url, self.config.install_database_engine_options)
+        install_engine = (
+            None
+            if combined_install_database
+            else build_engine(
+                install_db_url, self.config.install_database_engine_options
+            )
+        )
+
         return engine, install_engine
 
     def _configure_models(self, check_migrate_databases=False, config_file=None):
@@ -517,13 +522,16 @@ class GalaxyManagerApplication(MinimalManagerApp, MinimalGalaxyApplication):
         self.job_config = self._register_singleton(jobs.JobConfiguration)
 
         # Setup infrastructure for short term storage manager.
-        short_term_storage_config_kwds: Dict[str, Any] = {}
-        short_term_storage_config_kwds["short_term_storage_directory"] = self.config.short_term_storage_dir
+        short_term_storage_config_kwds: Dict[str, Any] = {
+            "short_term_storage_directory": self.config.short_term_storage_dir
+        }
+
         short_term_storage_default_duration = self.config.short_term_storage_default_duration
-        short_term_storage_maximum_duration = self.config.short_term_storage_maximum_duration
         if short_term_storage_default_duration is not None:
             short_term_storage_config_kwds["default_storage_duration"] = short_term_storage_default_duration
-        if short_term_storage_maximum_duration:
+        if (
+            short_term_storage_maximum_duration := self.config.short_term_storage_maximum_duration
+        ):
             short_term_storage_config_kwds["maximum_storage_duration"] = short_term_storage_maximum_duration
 
         short_term_storage_config = ShortTermStorageConfiguration(**short_term_storage_config_kwds)
@@ -676,13 +684,12 @@ class UniverseApplication(StructuredApp, GalaxyManagerApplication):
         self.heartbeat = None
         self.auth_manager = self._register_singleton(auth.AuthManager, auth.AuthManager(self.config))
         # Start the heartbeat process if configured and available
-        if self.config.use_heartbeat:
-            if heartbeat.Heartbeat:
-                self.heartbeat = heartbeat.Heartbeat(
-                    self.config, period=self.config.heartbeat_interval, fname=self.config.heartbeat_log
-                )
-                self.heartbeat.daemon = True
-                self.application_stack.register_postfork_function(self.heartbeat.start)
+        if self.config.use_heartbeat and heartbeat.Heartbeat:
+            self.heartbeat = heartbeat.Heartbeat(
+                self.config, period=self.config.heartbeat_interval, fname=self.config.heartbeat_log
+            )
+            self.heartbeat.daemon = True
+            self.application_stack.register_postfork_function(self.heartbeat.start)
 
         self.authnz_manager = None
         if self.config.enable_oidc:
@@ -791,8 +798,7 @@ class StatsdStructuredExecutionTimer(StructuredExecutionTimer):
 
 class ExecutionTimerFactory:
     def __init__(self, config):
-        statsd_host = getattr(config, "statsd_host", None)
-        if statsd_host:
+        if statsd_host := getattr(config, "statsd_host", None):
             from galaxy.web.framework.middleware.statsd import GalaxyStatsdClient
 
             self.galaxy_statsd_client = GalaxyStatsdClient(

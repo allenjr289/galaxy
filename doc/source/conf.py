@@ -63,9 +63,7 @@ autodoc_member_order = "bysource"
 
 
 def dont_skip_init(app, what, name, obj, skip, options):
-    if name == "__init__":
-        return False
-    return skip
+    return False if name == "__init__" else skip
 
 
 def setup(app):
@@ -94,7 +92,7 @@ master_doc = "index"
 
 # General information about the project.
 project = "Galaxy Project"
-copyright = str(datetime.datetime.now().year) + ", Galaxy Committers"
+copyright = f"{str(datetime.datetime.now().year)}, Galaxy Committers"
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the

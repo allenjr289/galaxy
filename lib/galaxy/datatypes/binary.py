@@ -125,9 +125,7 @@ class Idat(Binary):
     def sniff(self, filename):
         try:
             header = open(filename, "rb").read(4)
-            if header == b"IDAT":
-                return True
-            return False
+            return header == b"IDAT"
         except Exception:
             return False
 
@@ -259,9 +257,14 @@ class Meryldb(CompressedArchive):
                 with tarfile.open(filename, "r") as temptar:
                     _tar_content = temptar.getnames()
                     # 64 data files ad 64 indices + 2 folders
-                    if len(_tar_content) == 130:
-                        if len([_ for _ in _tar_content if _.endswith(".merylIndex")]) == 64:
-                            return True
+                    if (
+                        len(_tar_content) == 130
+                        and len(
+                            [_ for _ in _tar_content if _.endswith(".merylIndex")]
+                        )
+                        == 64
+                    ):
+                        return True
         except Exception as e:
             log.warning("%s, sniff Exception: %s", self, e)
         return False
@@ -507,9 +510,7 @@ class BamNative(CompressedArchive, _BamOrSam):
         # The first 4 bytes of any bam file is 'BAM\1', and the file is binary.
         try:
             header = gzip.open(filename).read(4)
-            if header == b"BAM\1":
-                return True
-            return False
+            return header == b"BAM\1"
         except Exception:
             return False
 
@@ -528,10 +529,8 @@ class BamNative(CompressedArchive, _BamOrSam):
             return f"Binary bam alignments file ({nice_size(dataset.get_size())})"
 
     def to_archive(self, dataset, name=""):
-        rel_paths = []
-        file_paths = []
-        rel_paths.append(f"{name or dataset.file_name}.{dataset.extension}")
-        file_paths.append(dataset.file_name)
+        rel_paths = [f"{name or dataset.file_name}.{dataset.extension}"]
+        file_paths = [dataset.file_name]
         # We may or may not have a bam index file (BamNative doesn't have it, but also index generation may have failed)
         if dataset.metadata.bam_index:
             rel_paths.append(f"{name or dataset.file_name}.{dataset.extension}.bai")
@@ -554,9 +553,7 @@ class BamNative(CompressedArchive, _BamOrSam):
         tmp_sorted_dataset_file_name_prefix = os.path.join(tmp_dir, "sorted")
         sorted_file_name = f"{tmp_sorted_dataset_file_name_prefix}.bam"
         slots = os.environ.get("GALAXY_SLOTS", 1)
-        sort_args = []
-        if self.sort_flag:
-            sort_args = [self.sort_flag]
+        sort_args = [self.sort_flag] if self.sort_flag else []
         sort_args.extend(
             [f"-@{slots}", file_name, "-T", tmp_sorted_dataset_file_name_prefix, "-O", "BAM", "-o", sorted_file_name]
         )
@@ -571,7 +568,7 @@ class BamNative(CompressedArchive, _BamOrSam):
         os.rmdir(tmp_dir)
 
     def get_chunk(self, trans, dataset, offset=0, ck_size=None):
-        if not offset == -1:
+        if offset != -1:
             try:
                 with pysam.AlignmentFile(dataset.file_name, "rb", check_sq=False) as bamfile:
                     ck_size = 300  # 300 lines
@@ -588,12 +585,11 @@ class BamNative(CompressedArchive, _BamOrSam):
                         offset = bamfile.tell()
                         if (line_number + header_line_count) > ck_size:
                             break
-                        else:
-                            bamline = alignment.tostring(bamfile)
-                            # Galaxy display each tag as separate column because 'tostring()' funcition put tabs in between each tag of tags column.
-                            # Below code will remove spaces between each tag.
-                            bamline_modified = ("\t").join(bamline.split()[:11] + [(" ").join(bamline.split()[11:])])
-                            ck_data = f"{ck_data}\n{bamline_modified}"
+                        bamline = alignment.tostring(bamfile)
+                        # Galaxy display each tag as separate column because 'tostring()' funcition put tabs in between each tag of tags column.
+                        # Below code will remove spaces between each tag.
+                        bamline_modified = ("\t").join(bamline.split()[:11] + [(" ").join(bamline.split()[11:])])
+                        ck_data = f"{ck_data}\n{bamline_modified}"
                     else:
                         # Nothing to enumerate; we've either offset to the end
                         # of the bamfile, or there is no data. (possible with
@@ -951,9 +947,7 @@ class CRAM(Binary):
     def sniff(self, filename):
         try:
             header = open(filename, "rb").read(4)
-            if header == b"CRAM":
-                return True
-            return False
+            return header == b"CRAM"
         except Exception:
             return False
 
@@ -986,9 +980,7 @@ class Bcf(BaseBcf):
         try:
             header = gzip.open(filename).read(3)
             # The first 3 bytes of any BCF file are 'BCF', and the file is binary.
-            if header == b"BCF":
-                return True
-            return False
+            return header == b"BCF"
         except Exception:
             return False
 
@@ -1038,9 +1030,7 @@ class BcfUncompressed(BaseBcf):
         try:
             header = open(filename, mode="rb").read(3)
             # The first 3 bytes of any BCF file are 'BCF', and the file is binary.
-            if header == b"BCF":
-                return True
-            return False
+            return header == b"BCF"
         except Exception:
             return False
 
@@ -1069,9 +1059,7 @@ class H5(Binary):
         # The first 8 bytes of any hdf5 file are 0x894844460d0a1a0a
         try:
             header = open(filename, "rb").read(8)
-            if header == self._magic:
-                return True
-            return False
+            return header == self._magic
         except Exception:
             return False
 
@@ -1173,12 +1161,11 @@ class Loom(H5):
                 # Check the optional but distinctive LOOM_SPEC_VERSION attribute
                 if bool(loom_file.attrs.get("LOOM_SPEC_VERSION")):
                     return True
-                # Check some mandatory H5 datasets and groups
-                for el in ("matrix", "row_attrs", "col_attrs"):
-                    if loom_file.get(el) is None:
-                        return False
-                else:
-                    return True
+                return all(
+                    loom_file.get(el) is not None
+                    for el in ("matrix", "row_attrs", "col_attrs")
+                )
+
         return False
 
     def set_peek(self, dataset):
@@ -1512,7 +1499,7 @@ class Grib(Binary):
                 tmp = file_prefix.contents_header_bytes[4:8]
                 _uint8struct = struct.Struct(b">B")
                 edition = _uint8struct.unpack_from(tmp, 3)[0]
-                if edition == 1 or edition == 2:
+                if edition in [1, 2]:
                     return True
             return False
         except Exception:
@@ -1726,8 +1713,7 @@ class Biom2(H5):
             lines = ["Biom2 (HDF5) file"]
             try:
                 with h5py.File(dataset.file_name) as f:
-                    for k, v in f.attrs.items():
-                        lines.append(f"{k}:  {util.unicodify(v)}")
+                    lines.extend(f"{k}:  {util.unicodify(v)}" for k, v in f.attrs.items())
             except Exception as e:
                 log.warning("%s, set_peek Exception: %s", self, util.unicodify(e))
             dataset.peek = "\n".join(lines)
@@ -1767,18 +1753,16 @@ class Cool(H5):
         False
         """
 
-        MAGIC = "HDF5::Cooler"
-        URL = "https://github.com/mirnylab/cooler"
-
         if super().sniff(filename):
             keys = ["chroms", "bins", "pixels", "indexes"]
+            MAGIC = "HDF5::Cooler"
+            URL = "https://github.com/mirnylab/cooler"
+
             with h5py.File(filename, "r") as handle:
                 fmt = util.unicodify(handle.attrs.get("format"))
                 url = util.unicodify(handle.attrs.get("format-url"))
                 if fmt == MAGIC or url == URL:
-                    if not all(name in handle.keys() for name in keys):
-                        return False
-                    return True
+                    return all((name in handle.keys() for name in keys))
         return False
 
     def set_peek(self, dataset):
@@ -1823,22 +1807,20 @@ class MCool(H5):
         False
         """
 
-        MAGIC = "HDF5::Cooler"
-        URL = "https://github.com/mirnylab/cooler"
-
         if super().sniff(filename):
             keys0 = ["resolutions"]
+            MAGIC = "HDF5::Cooler"
+            URL = "https://github.com/mirnylab/cooler"
+
             with h5py.File(filename, "r") as handle:
-                if not all(name in handle.keys() for name in keys0):
+                if any(name not in handle.keys() for name in keys0):
                     return False
                 res0 = next(iter(handle["resolutions"].keys()))
-                keys = ["chroms", "bins", "pixels", "indexes"]
                 fmt = util.unicodify(handle["resolutions"][res0].attrs.get("format"))
                 url = util.unicodify(handle["resolutions"][res0].attrs.get("format-url"))
                 if fmt == MAGIC or url == URL:
-                    if not all(name in handle["resolutions"][res0].keys() for name in keys):
-                        return False
-                    return True
+                    keys = ["chroms", "bins", "pixels", "indexes"]
+                    return all((name in handle["resolutions"][res0].keys() for name in keys))
         return False
 
     def set_peek(self, dataset):
@@ -1879,9 +1861,9 @@ class H5MLM(H5):
 
     def set_meta(self, dataset, overwrite=True, metadata_tmp_files_dir=None, **kwd):
         try:
-            spec_key = "hyper_params"
             params_file = dataset.metadata.hyper_params
             if not params_file:
+                spec_key = "hyper_params"
                 params_file = dataset.metadata.spec[spec_key].param.new_file(
                     dataset=dataset, metadata_tmp_files_dir=metadata_tmp_files_dir
                 )
@@ -1900,7 +1882,7 @@ class H5MLM(H5):
         if super().sniff(filename):
             keys = ["-model_config-"]
             with h5py.File(filename, "r") as handle:
-                if not all(name in handle.keys() for name in keys):
+                if any(name not in handle.keys() for name in keys):
                     return False
                 url = util.unicodify(handle.attrs.get("-URL-"))
             if url == self.URL:
@@ -1938,7 +1920,7 @@ class H5MLM(H5):
         try:
             return dataset.peek
         except Exception:
-            return "HDF5 Model (%s)" % (nice_size(dataset.get_size()))
+            return f"HDF5 Model ({nice_size(dataset.get_size())})"
 
     def display_data(self, trans, dataset, preview=False, filename=None, to_ext=None, **kwd):
         headers = kwd.get("headers", {})
@@ -1987,8 +1969,11 @@ class LudwigModel(Html):
         )
 
     def generate_primary_file(self, dataset=None):
-        rval = ["<html><head><title>Ludwig Model Composite Dataset.</title></head><p/>"]
-        rval.append("<div>This model dataset is composed of the following items:<p/><ul>")
+        rval = [
+            "<html><head><title>Ludwig Model Composite Dataset.</title></head><p/>",
+            "<div>This model dataset is composed of the following items:<p/><ul>",
+        ]
+
         for composite_name, composite_file in self.get_composite_files(dataset=dataset).items():
             description = composite_file.get("description")
             link_text = f"{composite_name} ({description})" if description else composite_name
@@ -2050,13 +2035,13 @@ class HexrdMaterials(H5):
         try:
             with h5py.File(dataset.file_name, "r") as mat_file:
                 dataset.metadata.materials = list(mat_file.keys())
-                sgn = dict()
-                lp = dict()
+                sgn = {}
+                lp = {}
                 for m in mat_file.keys():
                     if "SpaceGroupNumber" in mat_file[m] and len(mat_file[m]["SpaceGroupNumber"]) > 0:
                         sgn[m] = mat_file[m]["SpaceGroupNumber"][0].item()
                     if "LatticeParameters" in mat_file[m]:
-                        lp[m] = mat_file[m]["LatticeParameters"][0:].tolist()
+                        lp[m] = mat_file[m]["LatticeParameters"][:].tolist()
                 dataset.metadata.SpaceGroupNumber = sgn
                 dataset.metadata.LatticeParameters = lp
         except Exception as e:
@@ -2191,14 +2176,13 @@ class TwoBit(Binary):
 
     def sniff_prefix(self, sniff_prefix):
         magic = sniff_prefix.magic_header(">L")
-        return magic == TWOBIT_MAGIC_NUMBER or magic == TWOBIT_MAGIC_NUMBER_SWAP
+        return magic in [TWOBIT_MAGIC_NUMBER, TWOBIT_MAGIC_NUMBER_SWAP]
 
     def set_peek(self, dataset):
-        if not dataset.dataset.purged:
-            dataset.peek = "Binary TwoBit format nucleotide file"
-            dataset.blurb = nice_size(dataset.get_size())
-        else:
+        if dataset.dataset.purged:
             return super().set_peek(dataset)
+        dataset.peek = "Binary TwoBit format nucleotide file"
+        dataset.blurb = nice_size(dataset.get_size())
 
     def display_peek(self, dataset):
         try:
@@ -2241,8 +2225,8 @@ class SQlite(Binary):
     def set_meta(self, dataset, overwrite=True, **kwd):
         try:
             tables = []
-            columns = dict()
-            rowcounts = dict()
+            columns = {}
+            rowcounts = {}
             conn = sqlite.connect(dataset.file_name)
             c = conn.cursor()
             tables_query = "SELECT name,sql FROM sqlite_master WHERE type='table' ORDER BY name"
@@ -2273,9 +2257,7 @@ class SQlite(Binary):
         # about the format, see http://www.sqlite.org/fileformat.html
         try:
             header = open(filename, "rb").read(16)
-            if header == b"SQLite format 3\0":
-                return True
-            return False
+            return header == b"SQLite format 3\0"
         except Exception:
             return False
 
@@ -2287,10 +2269,7 @@ class SQlite(Binary):
             tables_query = "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
             result = c.execute(tables_query).fetchall()
             result = [_[0] for _ in result]
-            for table_name in table_names:
-                if table_name not in result:
-                    return False
-            return True
+            return all(table_name in result for table_name in table_names)
         except Exception as e:
             log.warning("%s, sniff Exception: %s", self, e)
         return False
@@ -2382,7 +2361,8 @@ class GeminiSQLite(SQlite):
 
     def set_peek(self, dataset):
         if not dataset.dataset.purged:
-            dataset.peek = "Gemini SQLite Database, version %s" % (dataset.metadata.gemini_version or "unknown")
+            dataset.peek = f'Gemini SQLite Database, version {dataset.metadata.gemini_version or "unknown"}'
+
             dataset.blurb = nice_size(dataset.get_size())
         else:
             dataset.peek = "file does not exist"
@@ -2392,7 +2372,7 @@ class GeminiSQLite(SQlite):
         try:
             return dataset.peek
         except Exception:
-            return "Gemini SQLite Database, version %s" % (dataset.metadata.gemini_version or "unknown")
+            return f'Gemini SQLite Database, version {dataset.metadata.gemini_version or "unknown"}'
 
 
 class ChiraSQLite(SQlite):
@@ -2469,7 +2449,8 @@ class CuffDiffSQlite(SQlite):
 
     def set_peek(self, dataset):
         if not dataset.dataset.purged:
-            dataset.peek = "CuffDiff SQLite Database, version %s" % (dataset.metadata.cuffdiff_version or "unknown")
+            dataset.peek = f'CuffDiff SQLite Database, version {dataset.metadata.cuffdiff_version or "unknown"}'
+
             dataset.blurb = nice_size(dataset.get_size())
         else:
             dataset.peek = "file does not exist"
@@ -2479,7 +2460,7 @@ class CuffDiffSQlite(SQlite):
         try:
             return dataset.peek
         except Exception:
-            return "CuffDiff SQLite Database, version %s" % (dataset.metadata.cuffdiff_version or "unknown")
+            return f'CuffDiff SQLite Database, version {dataset.metadata.cuffdiff_version or "unknown"}'
 
 
 class MzSQlite(SQlite):
@@ -2898,10 +2879,8 @@ class NcbiTaxonomySQlite(SQlite):
 
     def set_peek(self, dataset):
         if not dataset.dataset.purged:
-            dataset.peek = "NCBI Taxonomy SQLite Database, version {} ({} taxons)".format(
-                getattr(dataset.metadata, "ncbitaxonomy_schema_version", "unknown"),
-                getattr(dataset.metadata, "taxon_count", "unknown"),
-            )
+            dataset.peek = f'NCBI Taxonomy SQLite Database, version {getattr(dataset.metadata, "ncbitaxonomy_schema_version", "unknown")} ({getattr(dataset.metadata, "taxon_count", "unknown")} taxons)'
+
             dataset.blurb = nice_size(dataset.get_size())
         else:
             dataset.peek = "file does not exist"
@@ -2911,10 +2890,7 @@ class NcbiTaxonomySQlite(SQlite):
         try:
             return dataset.peek
         except Exception:
-            return "NCBI Taxonomy SQLite Database, version {} ({} taxons)".format(
-                getattr(dataset.metadata, "ncbitaxonomy_schema_version", "unknown"),
-                getattr(dataset.metadata, "taxon_count", "unknown"),
-            )
+            return f'NCBI Taxonomy SQLite Database, version {getattr(dataset.metadata, "ncbitaxonomy_schema_version", "unknown")} ({getattr(dataset.metadata, "taxon_count", "unknown")} taxons)'
 
 
 @build_sniff_from_prefix
@@ -3368,7 +3344,7 @@ class PostgresqlArchive(CompressedArchive):
     def set_peek(self, dataset):
         if not dataset.dataset.purged:
             dataset.peek = f"PostgreSQL Archive ({nice_size(dataset.get_size())})"
-            dataset.blurb = "PostgreSQL version %s" % (dataset.metadata.version or "unknown")
+            dataset.blurb = f'PostgreSQL version {dataset.metadata.version or "unknown"}'
         else:
             dataset.peek = "file does not exist"
             dataset.blurb = "file purged from disk"
@@ -3411,10 +3387,7 @@ class Fast5Archive(CompressedArchive):
                     for f in temptar:
                         if not f.isfile():
                             continue
-                        if f.name.endswith(".fast5"):
-                            return True
-                        else:
-                            return False
+                        return bool(f.name.endswith(".fast5"))
         except Exception as e:
             log.warning("%s, sniff Exception: %s", self, e)
         return False
@@ -3422,7 +3395,7 @@ class Fast5Archive(CompressedArchive):
     def set_peek(self, dataset):
         if not dataset.dataset.purged:
             dataset.peek = f"FAST5 Archive ({nice_size(dataset.get_size())})"
-            dataset.blurb = "%s sequences" % (dataset.metadata.fast5_count or "unknown")
+            dataset.blurb = f'{dataset.metadata.fast5_count or "unknown"} sequences'
         else:
             dataset.peek = "file does not exist"
             dataset.blurb = "file purged from disk"
@@ -3453,9 +3426,7 @@ class Fast5ArchiveGz(Fast5Archive):
     file_ext = "fast5.tar.gz"
 
     def sniff(self, filename):
-        if not is_gzip(filename):
-            return False
-        return Fast5Archive.sniff(self, filename)
+        return Fast5Archive.sniff(self, filename) if is_gzip(filename) else False
 
 
 class Fast5ArchiveBz2(Fast5Archive):
@@ -3477,9 +3448,7 @@ class Fast5ArchiveBz2(Fast5Archive):
     file_ext = "fast5.tar.bz2"
 
     def sniff(self, filename):
-        if not is_bz2(filename):
-            return False
-        return Fast5Archive.sniff(self, filename)
+        return Fast5Archive.sniff(self, filename) if is_bz2(filename) else False
 
 
 class SearchGuiArchive(CompressedArchive):
@@ -3530,7 +3499,8 @@ class SearchGuiArchive(CompressedArchive):
 
     def set_peek(self, dataset):
         if not dataset.dataset.purged:
-            dataset.peek = "SearchGUI Archive, version %s" % (dataset.metadata.searchgui_version or "unknown")
+            dataset.peek = f'SearchGUI Archive, version {dataset.metadata.searchgui_version or "unknown"}'
+
             dataset.blurb = nice_size(dataset.get_size())
         else:
             dataset.peek = "file does not exist"
@@ -3540,7 +3510,7 @@ class SearchGuiArchive(CompressedArchive):
         try:
             return dataset.peek
         except Exception:
-            return "SearchGUI Archive, version %s" % (dataset.metadata.searchgui_version or "unknown")
+            return f'SearchGUI Archive, version {dataset.metadata.searchgui_version or "unknown"}'
 
 
 @build_sniff_from_prefix
@@ -3598,11 +3568,10 @@ class Dcd(Binary):
                 header.seek(intsize)
                 if header.read(intsize) == self._magic_number:
                     return True
-                else:
-                    intsize = 8
-                    header.seek(intsize)
-                    if header.read(intsize) == self._magic_number:
-                        return True
+                intsize = 8
+                header.seek(intsize)
+                if header.read(intsize) == self._magic_number:
+                    return True
             return False
         except Exception:
             return False
@@ -3650,11 +3619,10 @@ class Vel(Binary):
                 header.seek(intsize)
                 if header.read(intsize) == self._magic_number:
                     return True
-                else:
-                    intsize = 8
-                    header.seek(intsize)
-                    if header.read(intsize) == self._magic_number:
-                        return True
+                intsize = 8
+                header.seek(intsize)
+                if header.read(intsize) == self._magic_number:
+                    return True
             return False
         except Exception:
             return False
@@ -3763,16 +3731,13 @@ class ICM(Binary):
 
     def sniff(self, dataset):
         line = open(dataset).read(100)
-        if (
+        return (
             ">ver = " in line
             and "len = " in line
             and "depth = " in line
             and "periodicity =" in line
             and "nodes = " in line
-        ):
-            return True
-
-        return False
+        )
 
 
 @build_sniff_from_prefix
@@ -3946,7 +3911,7 @@ class Pretext(Binary):
         try:
             return dataset.peek
         except Exception:
-            return "Binary pretext file (%s)" % (nice_size(dataset.get_size()))
+            return f"Binary pretext file ({nice_size(dataset.get_size())})"
 
 
 class JP2(Binary):
@@ -3971,9 +3936,7 @@ class JP2(Binary):
         # The first 12 bytes of any jp2 file are 0000000C6A5020200D0A870A
         try:
             header = open(filename, "rb").read(12)
-            if header == self._magic:
-                return True
-            return False
+            return header == self._magic
         except Exception:
             return False
 
@@ -3989,7 +3952,7 @@ class JP2(Binary):
         try:
             return dataset.peek
         except Exception:
-            return "Binary JPEG 2000 file (%s)" % (nice_size(dataset.get_size()))
+            return f"Binary JPEG 2000 file ({nice_size(dataset.get_size())})"
 
 
 class Npz(CompressedArchive):
@@ -4045,7 +4008,7 @@ class Npz(CompressedArchive):
         try:
             return dataset.peek
         except Exception:
-            return "Binary Numpy npz file (%s)" % (nice_size(dataset.get_size()))
+            return f"Binary Numpy npz file ({nice_size(dataset.get_size())})"
 
 
 class HexrdImagesNpz(Npz):
@@ -4122,7 +4085,7 @@ class HexrdImagesNpz(Npz):
         try:
             return dataset.peek
         except Exception:
-            return "Binary Numpy npz file (%s)" % (nice_size(dataset.get_size()))
+            return f"Binary Numpy npz file ({nice_size(dataset.get_size())})"
 
 
 class HexrdEtaOmeNpz(Npz):
@@ -4184,7 +4147,7 @@ class HexrdEtaOmeNpz(Npz):
         try:
             return dataset.peek
         except Exception:
-            return "Binary Numpy npz file (%s)" % (nice_size(dataset.get_size()))
+            return f"Binary Numpy npz file ({nice_size(dataset.get_size())})"
 
 
 if __name__ == "__main__":

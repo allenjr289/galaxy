@@ -16,8 +16,7 @@ def __main__():
     i = 0
     with open(input_name) as fh, open(output_name, "w") as out:
         for i, line in enumerate(fh):
-            line = line.rstrip("\r\n")
-            if line:
+            if line := line.rstrip("\r\n"):
                 if line.startswith(HEADER_STARTS_WITH):
                     header_lines += 1
                 else:

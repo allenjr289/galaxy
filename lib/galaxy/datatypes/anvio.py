@@ -50,10 +50,13 @@ class AnvioComposite(Html):
                     extra_files.append(rel_path)
         if extra_files:
             rval.append("<p/>This composite dataset contains these undefined files:<p/><ul>")
-            for rel_path in extra_files:
-                rval.append(f'<li><a href="{rel_path}">{rel_path}</a></li>')
+            rval.extend(
+                f'<li><a href="{rel_path}">{rel_path}</a></li>'
+                for rel_path in extra_files
+            )
+
             rval.append("</ul>")
-        if not (defined_files or extra_files):
+        if not defined_files and not extra_files:
             rval.append("<p/>This composite dataset does not contain any files!<p/><ul>")
         rval.append("</html>")
         return "\n".join(rval)
@@ -105,9 +108,9 @@ class AnvioDB(AnvioComposite):
             if found:
                 break
             if basename is not None and not os.path.exists(os.path.join(dataset.extra_files_path, basename)):
+                found = True
                 for name in glob.glob(os.path.join(dataset.extra_files_path, f"*{basename}")):
                     dataset.metadata.anvio_basename = os.path.basename(name)
-                    found = True
                     break
 
 

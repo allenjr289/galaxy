@@ -13,8 +13,7 @@ class WebDavFilesSource(PyFilesystem2FilesSource):
 
     def _open_fs(self, user_context):
         props = self._serialization_props(user_context)
-        handle = WebDAVFS(**props)
-        return handle
+        return WebDAVFS(**props)
 
 
 __all__ = ("WebDavFilesSource",)

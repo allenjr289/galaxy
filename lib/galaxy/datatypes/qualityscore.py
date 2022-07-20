@@ -47,22 +47,21 @@ class QualityScoreSOLiD(QualityScore):
         for line in fh:
             line = line.strip()
             if not line.startswith("#"):  # first non-empty non-comment line
-                if line.startswith(">"):
-                    line = fh.readline().strip()
-                    if line == "" or line.startswith(">"):
-                        return False
-                    try:
-                        [int(x) for x in line.split()]
-                        if not readlen:
-                            readlen = len(line.split())
-                        assert len(line.split()) == readlen  # SOLiD reads should be of the same length
-                    except Exception:
-                        return False
-                    goodblock += 1
-                    if goodblock > 10:
-                        return True
-                else:
+                if not line.startswith(">"):
                     return False
+                line = fh.readline().strip()
+                if line == "" or line.startswith(">"):
+                    return False
+                try:
+                    [int(x) for x in line.split()]
+                    if not readlen:
+                        readlen = len(line.split())
+                    assert len(line.split()) == readlen  # SOLiD reads should be of the same length
+                except Exception:
+                    return False
+                goodblock += 1
+                if goodblock > 10:
+                    return True
         return goodblock > 0
 
     def set_meta(self, dataset, **kwd):
@@ -95,17 +94,16 @@ class QualityScore454(QualityScore):
         for line in fh:
             line = line.strip()
             if line and not line.startswith("#"):  # first non-empty non-comment line
-                if line.startswith(">"):
-                    line = fh.readline().strip()
-                    if line == "" or line.startswith(">"):
-                        break
-                    try:
-                        [int(x) for x in line.split()]
-                    except Exception:
-                        return False
-                    return True
-                else:
+                if not line.startswith(">"):
                     break  # we found a non-empty line, but it's not a header
+                line = fh.readline().strip()
+                if line == "" or line.startswith(">"):
+                    break
+                try:
+                    [int(x) for x in line.split()]
+                except Exception:
+                    return False
+                return True
         return False
 
 

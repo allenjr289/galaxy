@@ -89,7 +89,7 @@ class CustosAuthnz(IdentityProvider):
             extra_params["code_challenge_method"] = "S256"
             trans.set_cookie(value=code_verifier, name=VERIFIER_COOKIE_NAME)
         if "extra_params" in self.config:
-            extra_params.update(self.config["extra_params"])
+            extra_params |= self.config["extra_params"]
         authorization_url, state = oauth2_session.authorization_url(base_authorize_url, **extra_params)
         trans.set_cookie(value=state, name=STATE_COOKIE_NAME)
         trans.set_cookie(value=nonce, name=NONCE_COOKIE_NAME)
@@ -130,8 +130,11 @@ class CustosAuthnz(IdentityProvider):
         if custos_authnz_token is None:
             user = trans.user
             if not user:
-                existing_user = trans.sa_session.query(User).filter_by(email=email).first()
-                if existing_user:
+                if (
+                    existing_user := trans.sa_session.query(User)
+                    .filter_by(email=email)
+                    .first()
+                ):
                     # If there is only a single external authentication
                     # provider in use, trust the user provided and
                     # automatically associate.
@@ -230,7 +233,7 @@ class CustosAuthnz(IdentityProvider):
             index = 0
             # Find CustosAuthnzToken record for this provider (should only be one)
             provider_tokens = [token for token in user.custos_auth if token.provider == self.config["provider"]]
-            if len(provider_tokens) == 0:
+            if not provider_tokens:
                 raise Exception(f"User is not associated with provider {self.config['provider']}")
             if len(provider_tokens) > 1:
                 for idx, token in enumerate(provider_tokens):
@@ -345,14 +348,12 @@ class CustosAuthnz(IdentityProvider):
         self.config["iam_client_secret"] = credentials["iam_client_secret"]
 
     def _get_well_known_uri_from_url(self, provider):
-        # TODO: Look up this URL from a Python library
-        if provider in ["custos", "keycloak"]:
-            base_url = self.config["url"]
-            # Remove potential trailing slash to avoid "//realms"
-            base_url = base_url if base_url[-1] != "/" else base_url[:-1]
-            return f"{base_url}/.well-known/openid-configuration"
-        else:
+        if provider not in ["custos", "keycloak"]:
             raise Exception(f"Unknown Custos provider name: {provider}")
+        base_url = self.config["url"]
+        # Remove potential trailing slash to avoid "//realms"
+        base_url = base_url if base_url[-1] != "/" else base_url[:-1]
+        return f"{base_url}/.well-known/openid-configuration"
 
     def _fetch_well_known_oidc_config(self, well_known_uri):
         try:
@@ -381,11 +382,14 @@ class CustosAuthnz(IdentityProvider):
         username = userinfo.get("preferred_username", userinfo["email"])
         if "@" in username:
             username = username.split("@")[0]  # username created from username portion of email
-        if trans.sa_session.query(trans.app.model.User).filter_by(username=username).first():
-            # if username already exists in database, append integer and iterate until unique username found
-            count = 0
-            while trans.sa_session.query(trans.app.model.User).filter_by(username=(f"{username}{count}")).first():
-                count += 1
-            return f"{username}{count}"
-        else:
+        if (
+            not trans.sa_session.query(trans.app.model.User)
+            .filter_by(username=username)
+            .first()
+        ):
             return username
+        # if username already exists in database, append integer and iterate until unique username found
+        count = 0
+        while trans.sa_session.query(trans.app.model.User).filter_by(username=(f"{username}{count}")).first():
+            count += 1
+        return f"{username}{count}"

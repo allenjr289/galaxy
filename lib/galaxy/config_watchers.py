@@ -137,10 +137,11 @@ class ConfigWatchers:
 
     @property
     def tool_config_paths(self):
-        tool_config_paths = []
-        if hasattr(self.app.config, "tool_configs"):
-            tool_config_paths = self.app.config.tool_configs
-        return tool_config_paths
+        return (
+            self.app.config.tool_configs
+            if hasattr(self.app.config, "tool_configs")
+            else []
+        )
 
     @property
     def job_rules_paths(self):

@@ -75,10 +75,13 @@ class SequenceSplitLocations(data.Text):
             try:
                 data = json.loads(file_prefix.contents_header)
                 sections = data["sections"]
-                for section in sections:
-                    if "start" not in section or "end" not in section or "sequences" not in section:
-                        return False
-                return True
+                return not any(
+                    "start" not in section
+                    or "end" not in section
+                    or "sequences" not in section
+                    for section in sections
+                )
+
             except Exception:
                 pass
         return False
@@ -107,9 +110,7 @@ class Sequence(data.Text):
                     continue
                 if line and line.startswith(">"):
                     sequences += 1
-                    data_lines += 1
-                else:
-                    data_lines += 1
+                data_lines += 1
             dataset.metadata.data_lines = data_lines
             dataset.metadata.sequences = sequences
 
@@ -129,14 +130,14 @@ class Sequence(data.Text):
         if split_params["split_mode"] == "number_of_parts":
             # legacy basic mode - split into a specified number of parts
             parts = int(split_params["split_size"])
-            sequences_per_file = [total_sequences / parts for i in range(parts)]
+            sequences_per_file = [total_sequences / parts for _ in range(parts)]
             for i in range(total_sequences % parts):
                 sequences_per_file[i] += 1
         elif split_params["split_mode"] == "to_size":
             # loop through the sections and calculate the number of sequences
             chunk_size = int(split_params["split_size"])
             rem = total_sequences % chunk_size
-            sequences_per_file = [chunk_size for i in range(total_sequences / chunk_size)]
+            sequences_per_file = [chunk_size for _ in range(total_sequences / chunk_size)]
             # TODO: Should we invest the time in a better way to handle small remainders?
             if rem > 0:
                 sequences_per_file.append(rem)
@@ -152,7 +153,7 @@ class Sequence(data.Text):
             total_sequences = input_datasets[0].metadata.sequences
         else:
             with compression_utils.get_fileobj(input_datasets[0].file_name) as in_file:
-                total_sequences = sum(1 for line in in_file)
+                total_sequences = sum(1 for _ in in_file)
             total_sequences /= 4
 
         sequences_per_file = cls.get_sequences_per_file(total_sequences, split_params)
@@ -162,9 +163,7 @@ class Sequence(data.Text):
     def do_fast_split(cls, input_datasets, toc_file_datasets, subdir_generator_function, split_params):
         data = json.load(open(toc_file_datasets[0].file_name))
         sections = data["sections"]
-        total_sequences = int(0)
-        for section in sections:
-            total_sequences += int(section["sequences"])
+        total_sequences = sum(int(section["sequences"]) for section in sections)
         sequences_per_file = cls.get_sequences_per_file(total_sequences, split_params)
         return cls.write_split_files(input_datasets, toc_file_datasets, subdir_generator_function, sequences_per_file)
 
@@ -203,7 +202,7 @@ class Sequence(data.Text):
             start_sequence += sequences_per_file[part_no]
         return directories
 
-    def split(cls, input_datasets, subdir_generator_function, split_params):
+    def split(self, input_datasets, subdir_generator_function, split_params):
         """Split a generic sequence file (not sensible or possible, see subclasses)."""
         if split_params is None:
             return None
@@ -231,7 +230,7 @@ class Sequence(data.Text):
         sections = toc_file["sections"]
         result = []
 
-        current_sequence = int(0)
+        current_sequence = 0
         i = 0
         # skip to the section that contains my starting sequence
         while i < len(sections) and start_sequence >= current_sequence + int(sections[i]["sequences"]):
@@ -242,8 +241,8 @@ class Sequence(data.Text):
 
         # These two variables act as an accumulator for consecutive entire blocks that
         # can be copied verbatim (without decompressing)
-        start_chunk = int(-1)
-        end_chunk = int(-1)
+        start_chunk = -1
+        end_chunk = -1
         copy_chunk_cmd = "dd bs=1 skip=%s count=%s if=%s 2> /dev/null >> %s"
 
         while sequence_count > 0 and i < len(sections):
@@ -261,16 +260,9 @@ class Sequence(data.Text):
                     start_chunk = -1
                 # extract, unzip, trim, recompress
                 result.append(
-                    "(dd bs=1 skip=%s count=%s if=%s 2> /dev/null )| zcat | ( tail -n +%s 2> /dev/null) | head -%s | gzip -c >> %s"
-                    % (
-                        start_copy,
-                        end_copy - start_copy,
-                        input_name,
-                        skip_sequences * 4 + 1,
-                        sequences_to_extract * 4,
-                        output_name,
-                    )
+                    f"(dd bs=1 skip={start_copy} count={end_copy - start_copy} if={input_name} 2> /dev/null )| zcat | ( tail -n +{skip_sequences * 4 + 1} 2> /dev/null) | head -{sequences_to_extract * 4} | gzip -c >> {output_name}"
                 )
+
             else:  # whole section - add it to the start_chunk/end_chunk accumulator
                 if start_chunk == -1:
                     start_chunk = start_copy
@@ -317,7 +309,7 @@ class Alignment(data.Text):
         name="species", desc="Species", default=[], param=metadata.SelectParameter, multiple=True, readonly=True
     )
 
-    def split(cls, input_datasets, subdir_generator_function, split_params):
+    def split(self, input_datasets, subdir_generator_function, split_params):
         """Split a generic alignment file (not sensible or possible, see subclasses)."""
         if split_params is None:
             return None
@@ -367,23 +359,25 @@ class Fasta(Sequence):
         """
         fh = file_prefix.string_io()
         for line in fh:
-            line = line.strip()
-            if line:  # first non-empty line
-                if line.startswith(">"):
-                    # The next line.strip() must not be '', nor startwith '>'
-                    line = fh.readline().strip()
-                    if line == "" or line.startswith(">"):
-                        return False
-
-                    # If there is a third line, and it isn't a header line, it may not contain chars like '()[].' otherwise it's most likely a DotBracket file
-                    line = fh.readline()
-                    if not line:
-                        return True
-                    if not line.startswith(">") and re.search(r"[\(\)\[\]\.]", line):
-                        return False
-                    return True
-                else:
+            if line := line.strip():
+                if not line.startswith(">"):
                     return False
+                # The next line.strip() must not be '', nor startwith '>'
+                line = fh.readline().strip()
+                if line == "" or line.startswith(">"):
+                    return False
+
+                # If there is a third line, and it isn't a header line, it may not contain chars like '()[].' otherwise it's most likely a DotBracket file
+                line = fh.readline()
+                return (
+                    bool(
+                        line.startswith(">")
+                        or not re.search(r"[\(\)\[\]\.]", line)
+                    )
+                    if line
+                    else True
+                )
+
         return False
 
     @classmethod
@@ -626,9 +620,8 @@ class Fastg(Sequence):
                 if not line:
                     break  # EOF
                 line = line.strip()
-                if i == 0:
-                    if not line.startswith("#FASTG:begin"):
-                        break
+                if i == 0 and not line.startswith("#FASTG:begin"):
+                    break
                 if line.startswith("#FASTG"):
                     props = {
                         x.split("=")[0][1:]: x.split("=")[1]
@@ -690,12 +683,11 @@ class BaseFastq(Sequence):
                     continue
                 seq_counter += 1
                 data_lines += 1
-                if line and line.startswith("@"):
-                    if seq_counter >= 4:
-                        # count previous block
-                        # blocks should be 4 lines long
-                        sequences += 1
-                        seq_counter = 1
+                if line and line.startswith("@") and seq_counter >= 4:
+                    # count previous block
+                    # blocks should be 4 lines long
+                    sequences += 1
+                    seq_counter = 1
             if seq_counter >= 4:
                 # count final block
                 sequences += 1
@@ -743,27 +735,27 @@ class BaseFastq(Sequence):
             return False
         headers = iter_headers(file_prefix, sep="\n", count=1000)
         # check to see if the base qualities match
-        if not self.quality_check(headers):
-            return False
-        return self.check_first_block(file_prefix)
+        return (
+            self.check_first_block(file_prefix)
+            if self.quality_check(headers)
+            else False
+        )
 
     def display_data(self, trans, dataset, preview=False, filename=None, to_ext=None, **kwd):
         headers = kwd.get("headers", {})
-        if preview:
-            with compression_utils.get_fileobj(dataset.file_name) as fh:
-                max_peek_size = 1000000  # 1 MB
-                if os.stat(dataset.file_name).st_size < max_peek_size:
-                    mime = "text/plain"
-                    self._clean_and_set_mime_type(trans, mime, headers)
-                    return fh.read(), headers
-                return (
-                    trans.fill_template_mako(
-                        "/dataset/large_file.mako", truncated_data=fh.read(max_peek_size), data=dataset
-                    ),
-                    headers,
-                )
-        else:
+        if not preview:
             return Sequence.display_data(self, trans, dataset, preview, filename, to_ext, **kwd)
+        with compression_utils.get_fileobj(dataset.file_name) as fh:
+            max_peek_size = 1000000  # 1 MB
+            if os.stat(dataset.file_name).st_size < max_peek_size:
+                self._clean_and_set_mime_type(trans, "text/plain", headers)
+                return fh.read(), headers
+            return (
+                trans.fill_template_mako(
+                    "/dataset/large_file.mako", truncated_data=fh.read(max_peek_size), data=dataset
+                ),
+                headers,
+            )
 
     @classmethod
     def split(cls, input_datasets, subdir_generator_function, split_params):
@@ -837,9 +829,7 @@ class BaseFastq(Sequence):
             and block[2][0][0] == "+"
             and block[1][0]
         ):
-            # Check the sequence line, make sure it contains only G/C/A/T/N
-            match = cls.bases_regexp.match(block[1][0])
-            if match:
+            if match := cls.bases_regexp.match(block[1][0]):
                 start, end = match.span()
                 if (end - start) == len(block[1][0]):
                     return True
@@ -854,7 +844,7 @@ class BaseFastq(Sequence):
         headers = iter_headers(dataset.file_name, sep="\n", count=-1)
         while True:
             block = list(islice(headers, 4))
-            if len(block) == 0:
+            if not block:
                 break
             if not self.check_block(block):
                 return DatatypeValidation.invalid("Invalid FASTQ structure found.")
@@ -885,10 +875,10 @@ class FastqSanger(Fastq):
         Presuming lines are lines from a fastq file,
         return True if the qualities are compatible with sanger encoding
         """
-        for line in islice(lines, 3, None, 4):
-            if not all(q >= "!" and q <= "S" for q in line[0]):
-                return False
-        return True
+        return all(
+            all(q >= "!" and q <= "S" for q in line[0])
+            for line in islice(lines, 3, None, 4)
+        )
 
 
 class FastqSolexa(Fastq):
@@ -906,10 +896,10 @@ class FastqSolexa(Fastq):
         Presuming lines are lines from a fastq file,
         return True if the qualities are compatible with sanger encoding
         """
-        for line in islice(lines, 3, None, 4):
-            if not all(q >= ";" and q <= "h" for q in line[0]):
-                return False
-        return True
+        return all(
+            all(q >= ";" and q <= "h" for q in line[0])
+            for line in islice(lines, 3, None, 4)
+        )
 
     def sniff_prefix(self, file_prefix: FilePrefix):
         # we expicitely do not want to have this sniffed. so we keep this here
@@ -932,10 +922,10 @@ class FastqIllumina(Fastq):
         Presuming lines are lines from a fastq file,
         return True if the qualities are compatible with sanger encoding
         """
-        for line in islice(lines, 3, None, 4):
-            if not all(q >= "@" and q <= "h" for q in line[0]):
-                return False
-        return True
+        return all(
+            all(q >= "@" and q <= "h" for q in line[0])
+            for line in islice(lines, 3, None, 4)
+        )
 
     def sniff_prefix(self, file_prefix: FilePrefix):
         # we expicitely do not want to have this sniffed. so we keep this here
@@ -1042,18 +1032,15 @@ class Maf(Alignment):
         out = ['<table cellspacing="0" cellpadding="3">']
         try:
             out.append("<tr><th>Species:&nbsp;")
-            for species in dataset.metadata.species:
-                out.append(f"{species}&nbsp;")
+            out.extend(f"{species}&nbsp;" for species in dataset.metadata.species)
             out.append("</th></tr>")
             if not dataset.peek:
                 dataset.set_peek()
             data = dataset.peek
             lines = data.splitlines()
             for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
-                out.append(f"<tr><td>{escape(line)}</td></tr>")
+                if line := line.strip():
+                    out.append(f"<tr><td>{escape(line)}</td></tr>")
             out.append("</table>")
             out = "".join(out)
         except Exception as exc:
@@ -1085,10 +1072,7 @@ class Maf(Alignment):
         """
         headers = get_headers(file_prefix, None)
         try:
-            if len(headers) > 1 and headers[0][0] and headers[0][0] == "##maf":
-                return True
-            else:
-                return False
+            return bool(len(headers) > 1 and headers[0][0] and headers[0][0] == "##maf")
         except Exception:
             return False
 
@@ -1124,8 +1108,9 @@ class MafCustomTrack(data.Text):
             maf_file = open(dataset.file_name)
             maf_file.readline()  # move past track line
             for i, block in enumerate(bx.align.maf.Reader(maf_file)):
-                ref_comp = block.get_component_by_src_start(dataset.metadata.dbkey)
-                if ref_comp:
+                if ref_comp := block.get_component_by_src_start(
+                    dataset.metadata.dbkey
+                ):
                     ref_chrom = bx.align.maf.src_split(ref_comp.src)[-1]
                     if chrom is None:
                         chrom = ref_chrom
@@ -1195,10 +1180,7 @@ class Axt(data.Text):
                         int(_)
                 except ValueError:
                     return False
-                if hdr[7] not in data.valid_strand:
-                    return False
-                else:
-                    return True
+                return hdr[7] in data.valid_strand
 
 
 @build_sniff_from_prefix
@@ -1232,10 +1214,12 @@ class Lav(data.Text):
         """
         headers = get_headers(file_prefix, None)
         try:
-            if len(headers) > 1 and headers[0][0] and headers[0][0].startswith("#:lav"):
-                return True
-            else:
-                return False
+            return bool(
+                len(headers) > 1
+                and headers[0][0]
+                and headers[0][0].startswith("#:lav")
+            )
+
         except Exception:
             return False
 
@@ -1260,8 +1244,7 @@ class RNADotPlotMatrix(data.Data):
             pairs = False
             with open(filename) as handle:
                 for line in handle:
-                    line = line.strip()
-                    if line:
+                    if line := line.strip():
                         if line.startswith("/sequence"):
                             seq = True
                         elif line.startswith("/coor"):
@@ -1339,36 +1322,31 @@ class DotBracket(Sequence):
         state = 0
 
         for line in file_prefix.line_iterator():
-            line = line.strip()
-
-            if line:
+            if line := line.strip():
                 # header line
-                if state == 0:
-                    if line[0] != ">":
-                        return False
-                    else:
-                        state = 1
+                if (
+                    state == 0
+                    and line[0] != ">"
+                    or state != 0
+                    and state == 1
+                    and not self.sequence_regexp.match(line)
+                ):
+                    return False
+                elif state == 0:
+                    state = 1
 
-                # sequence line
-                elif state == 1:
-                    if not self.sequence_regexp.match(line):
-                        return False
-                    else:
-                        sequence_size = len(line)
-                        state = 2
+                elif state != 0 and state == 1 and self.sequence_regexp.match(line):
+                    sequence_size = len(line)
+                    state = 2
 
-                # dot-bracket structure line
                 elif state == 2:
-                    if (
-                        sequence_size != len(line)
-                        or not self.structure_regexp.match(line)
-                        or line.count("(") != line.count(")")
-                        or line.count("[") != line.count("]")
-                        or line.count("{") != line.count("}")
-                    ):
-                        return False
-                    else:
-                        return True
+                    return bool(
+                        sequence_size == len(line)
+                        and self.structure_regexp.match(line)
+                        and line.count("(") == line.count(")")
+                        and line.count("[") == line.count("]")
+                        and line.count("{") == line.count("}")
+                    )
 
         # Number of lines is less than 3
         return False
@@ -1395,7 +1373,7 @@ class Genbank(data.Text):
         compressed = file_prefix.compressed_format
         if compressed and not isinstance(self, Binary):
             return False
-        return "LOCUS " == file_prefix.contents_header[0:6]
+        return file_prefix.contents_header[:6] == "LOCUS "
 
 
 @build_sniff_from_prefix
@@ -1445,24 +1423,22 @@ class MemePsp(Sequence):
                 break
             num_lines += 1
             line = line.strip()
-            if line:
-                if line.startswith(">"):
-                    got_header = True
-                    # The line must not be blank, nor start with '>'
-                    line = fh.readline().strip()
-                    if line == "" or line.startswith(">"):
-                        return False
-                    # All items within the line must be floats.
-                    if not floats_verified(line):
-                        return False
-                    else:
-                        got_priors = True
-                    # If there is a second line within the ID section,
-                    # all items within the line must be floats.
-                    line = fh.readline().strip()
-                    if line:
-                        if not floats_verified(line):
-                            return False
+            if line and line.startswith(">"):
+                got_header = True
+                # The line must not be blank, nor start with '>'
+                line = fh.readline().strip()
+                if line == "" or line.startswith(">"):
+                    return False
+                # All items within the line must be floats.
+                if not floats_verified(line):
+                    return False
+                else:
+                    got_priors = True
+                # If there is a second line within the ID section,
+                # all items within the line must be floats.
+                line = fh.readline().strip()
+                if line and not floats_verified(line):
+                    return False
         # We've checked the first 100 lines and they are compatible with the memepsp format
         # and contain at least one valid entry
         return got_header and got_priors

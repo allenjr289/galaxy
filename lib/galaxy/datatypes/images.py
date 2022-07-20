@@ -100,9 +100,9 @@ class OMETiff(Tiff):
     )
 
     def set_meta(self, dataset, overwrite=True, metadata_tmp_files_dir=None, **kwd):
-        spec_key = "offsets"
         offsets_file = dataset.metadata.offsets
         if not offsets_file:
+            spec_key = "offsets"
             offsets_file = dataset.metadata.spec[spec_key].param.new_file(
                 dataset=dataset, metadata_tmp_files_dir=metadata_tmp_files_dir
             )
@@ -246,9 +246,7 @@ class Tck(Binary):
             for identifier in elem:
                 if identifier in file_prefix.contents_header_bytes:
                     matches += 1
-        if matches == 5:
-            return True
-        return False
+        return matches == 5
 
 
 @build_sniff_from_prefix
@@ -303,14 +301,12 @@ class Trk(Binary):
         ]
         np_dtype = np.dtype(header_def)
         header: np.ndarray = np.ndarray(shape=(), dtype=np_dtype, buffer=header_raw)
-        if (
+        return (
             header["header_size"] == 1000
             and b"TRACK" in header["magic"]
             and header["version"] == 2
             and len(header["dim"]) == 3
-        ):
-            return True
-        return False
+        )
 
 
 class Mrc2014(Binary):
@@ -374,8 +370,11 @@ class Analyze75(Binary):
         self.add_composite_file("t2m", description="The Analyze75 t2m file.", optional=True, is_binary=True)
 
     def generate_primary_file(self, dataset=None):
-        rval = ["<html><head><title>Analyze75 Composite Dataset.</title></head><p/>"]
-        rval.append("<div>This composite dataset is composed of the following files:<p/><ul>")
+        rval = [
+            "<html><head><title>Analyze75 Composite Dataset.</title></head><p/>",
+            "<div>This composite dataset is composed of the following files:<p/><ul>",
+        ]
+
         for composite_name, composite_file in self.get_composite_files(dataset=dataset).items():
             fn = composite_name
             opt_text = ""
@@ -410,9 +409,7 @@ class Nifti1(Binary):
 
     def sniff_prefix(self, file_prefix: FilePrefix):
         magic = file_prefix.contents_header_bytes[344:348]
-        if magic == b"n+1\0":
-            return True
-        return False
+        return magic == b"n+1\0"
 
 
 @build_sniff_from_prefix
@@ -434,9 +431,7 @@ class Nifti2(Binary):
 
     def sniff_prefix(self, file_prefix: FilePrefix):
         magic = file_prefix.contents_header_bytes[4:8]
-        if magic in [b"n+2\0", b"ni2\0"]:
-            return True
-        return False
+        return magic in [b"n+2\0", b"ni2\0"]
 
 
 @build_sniff_from_prefix
@@ -470,9 +465,7 @@ class Gifti(GenericXml):
         if line.strip() == '<!DOCTYPE GIFTI SYSTEM "http://www.nitrc.org/frs/download.php/1594/gifti.dtd">':
             return True
         line = handle.readline()
-        if line.strip().startswith("<GIFTI"):
-            return True
-        return False
+        return bool(line.strip().startswith("<GIFTI"))
 
 
 @build_sniff_from_prefix
@@ -517,15 +510,8 @@ class Star(data.Text):
             if line.startswith("data_"):
                 in_data_block = True
                 continue
-            if in_data_block:
-                # Lines within data blocks must
-                # be blank, start with loop_, or
-                # start with _.
-                if len(line) == 0:
-                    continue
-                if line.startswith("loop_") or line.startswith("_"):
-                    return True
-                return False
+            if in_data_block and len(line) != 0:
+                return bool(line.startswith("loop_") or line.startswith("_"))
         return False
 
 

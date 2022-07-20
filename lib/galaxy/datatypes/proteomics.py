@@ -47,8 +47,11 @@ class Wiff(Binary):
         )
 
     def generate_primary_file(self, dataset=None):
-        rval = ["<html><head><title>Wiff Composite Dataset </title></head><p/>"]
-        rval.append("<div>This composite dataset is composed of the following files:<p/><ul>")
+        rval = [
+            "<html><head><title>Wiff Composite Dataset </title></head><p/>",
+            "<div>This composite dataset is composed of the following files:<p/><ul>",
+        ]
+
         for composite_name, composite_file in self.get_composite_files(dataset=dataset).items():
             fn = composite_name
             opt_text = ""
@@ -119,7 +122,7 @@ class MzTab(Text):
                     mandatory_field = self._man_mtd[columns[1]]
                     if mandatory_field is None or columns[2].lower() in mandatory_field:
                         found_man_mtd.add(columns[1])
-            elif not columns[0] in self._sections:
+            elif columns[0] not in self._sections:
                 return False
         return has_version and found_man_mtd == set(self._man_mtd.keys())
 
@@ -236,9 +239,7 @@ class PepList(Tabular):
     def sniff_prefix(self, file_prefix: FilePrefix):
         fh = file_prefix.string_io()
         line = [_.strip() for _ in fh.readline().split("\t")]
-        if line == self.column_names:
-            return True
-        return False
+        return line == self.column_names
 
 
 @build_sniff_from_prefix
@@ -273,9 +274,7 @@ class PSMS(Tabular):
     def sniff_prefix(self, file_prefix: FilePrefix):
         fh = file_prefix.string_io()
         line = [_.strip() for _ in fh.readline().split("\t")]
-        if line == self.column_names:
-            return True
-        return False
+        return line == self.column_names
 
 
 @build_sniff_from_prefix
@@ -298,10 +297,7 @@ class PEFF(Sequence):
         False
         """
         fh = file_prefix.string_io()
-        if re.match(r"# PEFF \d+.\d+", fh.readline()):
-            return True
-        else:
-            return False
+        return bool(re.match(r"# PEFF \d+.\d+", fh.readline()))
 
 
 class PepXmlReport(Tabular):
@@ -383,7 +379,6 @@ class Dta(TabularData):
     comment_lines = 0
 
     def set_meta(self, dataset, **kwd):
-        column_types = []
         data_row = []
         data_lines = 0
         if dataset.has_data():
@@ -391,10 +386,7 @@ class Dta(TabularData):
                 for _ in dtafile:
                     data_lines += 1
 
-        # Guess column types
-        for cell in data_row:
-            column_types.append(self.guess_type(cell))
-
+        column_types = [self.guess_type(cell) for cell in data_row]
         # Set metadata
         dataset.metadata.data_lines = data_lines
         dataset.metadata.comment_lines = 0
@@ -451,9 +443,7 @@ class Dta2d(TabularData):
             line = [float(_) for _ in line]
         except ValueError:
             return False
-        if not all(_ >= 0 for _ in line):
-            return False
-        return True
+        return all((_ >= 0 for _ in line))
 
     def set_meta(self, dataset, **kwd):
         data_lines = 0
@@ -486,8 +476,8 @@ class Dta2d(TabularData):
             line = line.strip()
             if sep is None:
                 sep = self._parse_delimiter(line)
-                if sep is None:
-                    return False
+            if sep is None:
+                return False
             line = line.split(sep)
             if len(line) != 3:
                 return False
@@ -497,9 +487,7 @@ class Dta2d(TabularData):
                     return False
             elif not self._parse_dataline(line):
                 return False
-        if sep is None or header is None:
-            return False
-        return True
+        return sep is not None and header is not None
 
 
 @build_sniff_from_prefix
@@ -550,29 +538,30 @@ class Edta(TabularData):
             return None
         line = [_.lower().replace("/", "") for _ in line]
         if len(line) == 3:
-            if line[0] == "rt" and line[1] == "mz" and (line[2] == "int" or line[2] == "intensity"):
+            if (
+                line[0] == "rt"
+                and line[1] == "mz"
+                and line[2] in ["int", "intensity"]
+            ):
                 return 1
             else:
                 return None
-        if line[0] != "rt" or line[1] != "mz" or (line[2] != "int" and line[2] != "intensity") or line[3] != "charge":
+        if (
+            line[0] != "rt"
+            or line[1] != "mz"
+            or line[2] not in ["int", "intensity"]
+            or line[3] != "charge"
+        ):
             return None
-        if not line[4].startswith("rt"):
-            return 2
-        else:
-            return 3
+        return 3 if line[4].startswith("rt") else 2
 
     def _parse_dataline(self, line, tpe):
-        if tpe == 2 or tpe == 3:
-            idx = 4
-        else:
-            idx = 3
+        idx = 4 if tpe in [2, 3] else 3
         try:
             line = [float(_) for _ in line[:idx]]
         except ValueError:
             return False
-        if not all(_ >= 0 for _ in line[:idx]):
-            return False
-        return True
+        return all((_ >= 0 for _ in line[:idx]))
 
     def _clean_header(self, line):
         for idx, el in enumerate(line):
@@ -630,8 +619,8 @@ class Edta(TabularData):
             line = line.strip("\r\n")
             if sep is None:
                 sep = self._parse_delimiter(line)
-                if sep is None:
-                    return False
+            if sep is None:
+                return False
             line = line.split(sep)
 
             if idx == 0:
@@ -642,9 +631,7 @@ class Edta(TabularData):
                     return False
             elif not self._parse_dataline(line, tpe):
                 return False
-        if tpe is None:
-            return False
-        return True
+        return tpe is not None
 
 
 class ProteomicsXml(GenericXml):
@@ -900,9 +887,7 @@ class ThermoRAW(Binary):
         try:
             header = open(filename, "rb").read(20)
             finnigan = b"F\0i\0n\0n\0i\0g\0a\0n"
-            if header.find(finnigan) != -1:
-                return True
-            return False
+            return header.find(finnigan) != -1
         except Exception:
             return False
 
@@ -974,8 +959,11 @@ class SPLib(Msp):
         self.add_composite_file("library.pepidx", description="Peptide index", is_binary=False)
 
     def generate_primary_file(self, dataset=None):
-        rval = ["<html><head><title>Spectral Library Composite Dataset </title></head><p/>"]
-        rval.append("<div>This composite dataset is composed of the following files:<p/><ul>")
+        rval = [
+            "<html><head><title>Spectral Library Composite Dataset </title></head><p/>",
+            "<div>This composite dataset is composed of the following files:<p/><ul>",
+        ]
+
         for composite_name, composite_file in self.get_composite_files(dataset=dataset).items():
             fn = composite_name
             opt_text = ""
@@ -1021,11 +1009,11 @@ class Ms2(Text):
                 break
 
         for header_field in ["CreationDate", "Extractor", "ExtractorVersion", "ExtractorOptions"]:
-            found_header = False
-            for header_line in header_lines:
-                if header_line.startswith(f"H\t{header_field}"):
-                    found_header = True
-                    break
+            found_header = any(
+                header_line.startswith(f"H\t{header_field}")
+                for header_line in header_lines
+            )
+
             if not found_header:
                 return False
 
@@ -1063,11 +1051,14 @@ class ImzML(Binary):
         self.add_composite_file("ibd", description="The mass spectral data component.", is_binary=True)
 
     def generate_primary_file(self, dataset=None):
-        rval = ["<html><head><title>imzML Composite Dataset </title></head><p/>"]
-        rval.append("<div>This composite dataset is composed of the following files:<p/><ul>")
+        rval = [
+            "<html><head><title>imzML Composite Dataset </title></head><p/>",
+            "<div>This composite dataset is composed of the following files:<p/><ul>",
+        ]
+
+        opt_text = ""
         for composite_name, composite_file in self.get_composite_files(dataset=dataset).items():
             fn = composite_name
-            opt_text = ""
             if composite_file.get("description"):
                 rval.append(
                     f"<li><a href=\"{fn}\" type=\"text/plain\">{fn} ({composite_file.get('description')})</a>{opt_text}</li>"
